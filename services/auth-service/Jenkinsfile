@@ -10,13 +10,15 @@ environment {
 
     IMAGE_NAME = "auth-service"
 
-    IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
+    IMAGE_TAG = "${BUILD_NUMBER}"
 
     ECR_REPO = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}"
 
     GITOPS_REPO = "git@github.com:Oluwole-Faluwoye/enterprise-platform-gitops.git"
 
     SONARQUBE_ENV = "sonarqube"
+
+    SERVICE_DIR = "services/auth-service"
 }
 
 options {
@@ -62,16 +64,23 @@ stages {
 
         steps {
 
+            dir("${SERVICE_DIR}") {
+
             sh '''
                 mvn clean verify
             '''
         }
 
+    }
+
         post {
 
             always {
 
-                junit '**/target/surefire-reports/*.xml'
+                junit(
+                    testResults: 'services/auth-service/target/surefire-reports/*.xml',
+                    allowEmptyResults: true
+                )
             }
         }
     }
@@ -82,12 +91,16 @@ stages {
 
             withSonarQubeEnv("${SONARQUBE_ENV}") {
 
+                dir("${SERVICE_DIR}") {
+
                 sh '''
                     mvn sonar:sonar
                 '''
             }
         }
     }
+
+}
 
 
     stage('Quality Gate') {
@@ -138,6 +151,8 @@ stages {
 
         steps {
 
+            dir("${SERVICE_DIR}") {
+
             sh '''
 
             docker build \
@@ -146,6 +161,8 @@ stages {
             '''
         }
     }
+
+}
 
     stage('Trivy Container Scan') {
 
