@@ -1,0 +1,251 @@
+pipeline {
+
+```
+agent any
+
+environment {
+
+    AWS_REGION = "us-east-1"
+
+    ACCOUNT_ID = "761018849945"
+
+    IMAGE_NAME = "auth-service"
+
+    IMAGE_TAG = "${BUILD_NUMBER}"
+
+    ECR_REPO = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}"
+
+    GITOPS_REPO = "git@github.com:<YOUR_GITHUB_USERNAME>/enterprise-gitops.git"
+
+    GITOPS_ENV = "dev"
+
+    GITOPS_APP = "auth-service"
+
+    SONARQUBE_ENV = "sonarqube"
+}
+
+options {
+
+    timestamps()
+
+    disableConcurrentBuilds()
+
+    buildDiscarder(
+        logRotator(
+            numToKeepStr: '20'
+        )
+    )
+
+    ansiColor('xterm')
+}
+
+stages {
+
+    stage('Checkout') {
+
+        steps {
+
+            echo "Checking out source code..."
+
+            checkout scm
+        }
+    }
+
+    stage('Build & Unit Tests') {
+
+        agent {
+
+            docker {
+
+                image 'maven:3.9-eclipse-temurin-21'
+
+                args '-v $HOME/.m2:/root/.m2'
+
+                reuseNode true
+            }
+        }
+
+        steps {
+
+            sh '''
+                mvn clean verify
+            '''
+        }
+
+        post {
+
+            always {
+
+                junit '**/target/surefire-reports/*.xml'
+            }
+        }
+    }
+
+    stage('SonarQube Analysis') {
+
+        steps {
+
+            withSonarQubeEnv("${SONARQUBE_ENV}") {
+
+                sh '''
+                    mvn sonar:sonar
+                '''
+            }
+        }
+    }
+
+    stage('OWASP Dependency Check') {
+
+        steps {
+
+            sh '''
+
+            docker run --rm \
+              -v $(pwd):/src \
+              owasp/dependency-check:latest \
+              --scan /src \
+              --format HTML \
+              --out /src/reports
+
+            '''
+        }
+    }
+
+    stage('Trivy Filesystem Scan') {
+
+        steps {
+
+            sh '''
+
+            docker run --rm \
+              -v $(pwd):/workspace \
+              aquasec/trivy:latest fs \
+              --severity HIGH,CRITICAL \
+              /workspace
+
+            '''
+        }
+    }
+
+    stage('Build Docker Image') {
+
+        steps {
+
+            sh '''
+
+            docker build \
+              -t ${IMAGE_NAME}:${IMAGE_TAG} .
+
+            '''
+        }
+    }
+
+    stage('Trivy Container Scan') {
+
+        steps {
+
+            sh '''
+
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:latest image \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              ${IMAGE_NAME}:${IMAGE_TAG}
+
+            '''
+        }
+    }
+
+    stage('Login To ECR') {
+
+        steps {
+
+            sh '''
+
+            aws ecr get-login-password \
+              --region ${AWS_REGION} \
+            | docker login \
+              --username AWS \
+              --password-stdin \
+              ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+            '''
+        }
+    }
+
+    stage('Push Image To ECR') {
+
+        steps {
+
+            sh '''
+
+            docker tag \
+              ${IMAGE_NAME}:${IMAGE_TAG} \
+              ${ECR_REPO}:${IMAGE_TAG}
+
+            docker push \
+              ${ECR_REPO}:${IMAGE_TAG}
+
+            '''
+        }
+    }
+
+    stage('Update GitOps Repository') {
+
+        steps {
+
+            sshagent(['github-ssh']) {
+
+                sh '''
+
+                rm -rf enterprise-gitops
+
+                git clone ${GITOPS_REPO}
+
+                cd enterprise-gitops/environments/${GITOPS_ENV}/${GITOPS_APP}
+
+                sed -i "s|tag:.*|tag: \\"${IMAGE_TAG}\\"|" values.yaml
+
+                git config user.email "jenkins@platform.local"
+
+                git config user.name "Jenkins"
+
+                git add .
+
+                git commit -m "Deploy ${GITOPS_APP} build ${IMAGE_TAG}" || true
+
+                git push
+
+                '''
+            }
+        }
+    }
+}
+
+post {
+
+    success {
+
+        echo "Build completed successfully."
+
+        sh '''
+            docker image prune -f || true
+        '''
+    }
+
+    failure {
+
+        echo "Build failed."
+    }
+
+    always {
+
+        archiveArtifacts artifacts: 'reports/**/*.*', allowEmptyArchive: true
+
+        cleanWs()
+    }
+}
+```
+
+}
