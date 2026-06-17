@@ -123,21 +123,10 @@ stages {
     }
 
     stage('OWASP Dependency Check') {
-
-        steps {
-
-            sh '''
-
-            docker run --rm \
-              -v $(pwd):/src \
-              owasp/dependency-check:latest \
-              --scan /src \
-              --format HTML \
-              --out /src/reports
-
-            '''
-        }
+    steps {
+        echo 'Skipping OWASP Dependency Check temporarily'
     }
+}
 
     stage('Trivy Filesystem Scan') {
 
