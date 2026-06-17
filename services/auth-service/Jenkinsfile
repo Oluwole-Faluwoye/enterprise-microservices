@@ -230,6 +230,8 @@ stages {
     }
 }
 
+}
+
 post {
 
     success {
