@@ -1,6 +1,5 @@
 pipeline {
 
-```
 agent any
 
 environment {
@@ -11,15 +10,11 @@ environment {
 
     IMAGE_NAME = "auth-service"
 
-    IMAGE_TAG = "${BUILD_NUMBER}"
+    IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
 
     ECR_REPO = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}"
 
-    GITOPS_REPO = "git@github.com:<YOUR_GITHUB_USERNAME>/enterprise-gitops.git"
-
-    GITOPS_ENV = "dev"
-
-    GITOPS_APP = "auth-service"
+    GITOPS_REPO = "git@github.com:Oluwole-Faluwoye/enterprise-platform-gitops.git"
 
     SONARQUBE_ENV = "sonarqube"
 }
@@ -90,6 +85,18 @@ stages {
                 sh '''
                     mvn sonar:sonar
                 '''
+            }
+        }
+    }
+
+
+    stage('Quality Gate') {
+
+        steps {
+
+            timeout(time: 5, unit: 'MINUTES') {
+
+                waitForQualityGate abortPipeline: true
             }
         }
     }
@@ -193,32 +200,32 @@ stages {
 
     stage('Update GitOps Repository') {
 
-        steps {
+    steps {
 
-            sshagent(['github-ssh']) {
+        sshagent(['github-ssh']) {
 
-                sh '''
+            sh '''
 
-                rm -rf enterprise-gitops
+            rm -rf enterprise-platform-gitops
 
-                git clone ${GITOPS_REPO}
+            git clone ${GITOPS_REPO}
 
-                cd enterprise-gitops/environments/${GITOPS_ENV}/${GITOPS_APP}
+            cd enterprise-platform-gitops
 
-                sed -i "s|tag:.*|tag: \\"${IMAGE_TAG}\\"|" values.yaml
+            sed -i "s|tag:.*|  tag: \\"${IMAGE_TAG}\\"|" \
+              charts/auth-service/values-dev.yaml
 
-                git config user.email "jenkins@platform.local"
+            git config user.email "jenkins@platform.local"
 
-                git config user.name "Jenkins"
+            git config user.name "Jenkins"
 
-                git add .
+            git add charts/auth-service/values-dev.yaml
 
-                git commit -m "Deploy ${GITOPS_APP} build ${IMAGE_TAG}" || true
+            git commit -m "Deploy auth-service image ${IMAGE_TAG}" || true
 
-                git push
+            git push origin main
 
-                '''
-            }
+            '''
         }
     }
 }
@@ -246,6 +253,5 @@ post {
         cleanWs()
     }
 }
-```
 
 }
