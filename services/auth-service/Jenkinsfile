@@ -249,7 +249,7 @@ stages {
 
             cd enterprise-platform-gitops
 
-            sed -i "s|tag:.*|  tag: \\"${IMAGE_TAG}\\"|" \
+            sed -i "s|^[[:space:]]*tag:.*|  tag: \"${IMAGE_TAG}\"|" \
               charts/auth-service/values-dev.yaml
 
             git config user.email "jenkins@platform.local"
