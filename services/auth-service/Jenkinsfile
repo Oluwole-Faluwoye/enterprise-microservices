@@ -124,31 +124,57 @@ stages {
 
     stage('OWASP Dependency Check') {
 
+    options {
+        timeout(time: 15, unit: 'MINUTES')
+    }
+
     steps {
 
         withCredentials([
             string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')
         ]) {
 
-            catchError(
-                buildResult: 'SUCCESS',
-                stageResult: 'UNSTABLE'
-            ) {
+            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
 
                 sh '''
+                echo "======================================="
+                echo "DEPENDENCY CHECK"
+                echo "======================================="
+
+                echo "WORKSPACE:"
+                echo $WORKSPACE
+
+                pwd
+
+                mkdir -p reports
 
                 docker run --rm \
-                  -v /var/jenkins_home/workspace/auth-service-pipeline:/src \
-                  -v /var/jenkins_home/dependency-check-data:/usr/share/dependency-check/data \
-                  owasp/dependency-check:12.1.8 \
+                  -v "$WORKSPACE":/src \
+                  -v /data/jenkins/dependency-check-data:/usr/share/dependency-check/data \
+                  owasp/dependency-check:latest \
                   --nvdApiKey ${NVD_API_KEY} \
-                  --project auth-service \
                   --scan /src \
                   --format HTML \
                   --out /src/reports
 
+                ls -lah reports || true
                 '''
             }
+        }
+    }
+
+    post {
+
+        always {
+
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'reports',
+                reportFiles: 'dependency-check-report.html',
+                reportName: 'OWASP Dependency Check Report'
+            ])
         }
     }
 }
