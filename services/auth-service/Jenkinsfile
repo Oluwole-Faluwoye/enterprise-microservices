@@ -138,9 +138,11 @@ stages {
                 sh '''
 
                 docker run --rm \
-                  -v $(pwd):/src \
-                  owasp/dependency-check:latest \
-                  --nvdApiKey $NVD_API_KEY \
+                  -v /var/jenkins_home/workspace/auth-service-pipeline:/src \
+                  -v /var/jenkins_home/dependency-check-data:/usr/share/dependency-check/data \
+                  owasp/dependency-check:12.1.8 \
+                  --nvdApiKey ${NVD_API_KEY} \
+                  --project auth-service \
                   --scan /src \
                   --format HTML \
                   --out /src/reports
