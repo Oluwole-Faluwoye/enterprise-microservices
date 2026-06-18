@@ -123,8 +123,31 @@ stages {
     }
 
     stage('OWASP Dependency Check') {
+
     steps {
-        echo 'Skipping OWASP Dependency Check temporarily'
+
+        withCredentials([
+            string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')
+        ]) {
+
+            catchError(
+                buildResult: 'SUCCESS',
+                stageResult: 'UNSTABLE'
+            ) {
+
+                sh '''
+
+                docker run --rm \
+                  -v $(pwd):/src \
+                  owasp/dependency-check:latest \
+                  --nvdApiKey $NVD_API_KEY \
+                  --scan /src \
+                  --format HTML \
+                  --out /src/reports
+
+                '''
+            }
+        }
     }
 }
 
