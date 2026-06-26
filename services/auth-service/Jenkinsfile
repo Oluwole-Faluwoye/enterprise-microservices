@@ -1,25 +1,34 @@
 pipeline {
 
-agent any
+    agent any
 
-environment {
+    parameters {
 
-    AWS_REGION = "us-east-1"
+        booleanParam(
+            name: 'RUN_OWASP_SCAN',
+            defaultValue: false,
+            description: 'Run OWASP Dependency Check scan'
+        )
+    }
 
-    ACCOUNT_ID = "761018849945"
+    environment {
 
-    IMAGE_NAME = "auth-service"
+        AWS_REGION = "us-east-1"
 
-    IMAGE_TAG = "${BUILD_NUMBER}"
+        ACCOUNT_ID = "761018849945"
 
-    ECR_REPO = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}"
+        IMAGE_NAME = "auth-service"
 
-    GITOPS_REPO = "git@github.com:Oluwole-Faluwoye/enterprise-platform-gitops.git"
+        IMAGE_TAG = "${BUILD_NUMBER}"
 
-    SONARQUBE_ENV = "sonarqube"
+        ECR_REPO = "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_NAME}"
 
-    SERVICE_DIR = "services/auth-service"
-}
+        GITOPS_REPO = "git@github.com:Oluwole-Faluwoye/enterprise-platform-gitops.git"
+
+        SONARQUBE_ENV = "sonarqube"
+
+        SERVICE_DIR = "services/auth-service"
+    }
 
 options {
 
@@ -124,6 +133,12 @@ stages {
 
     stage('OWASP Dependency Check') {
 
+    when {
+        expression {
+            return params.RUN_OWASP_SCAN
+        }
+    }
+
     options {
         timeout(time: 15, unit: 'MINUTES')
     }
@@ -131,33 +146,61 @@ stages {
     steps {
 
         withCredentials([
-            string(credentialsId: 'nvd-api-key', variable: 'NVD_API_KEY')
+            string(
+                credentialsId: 'nvd-api-key',
+                variable: 'NVD_API_KEY'
+            )
         ]) {
 
-            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+            catchError(
+                buildResult: 'SUCCESS',
+                stageResult: 'UNSTABLE'
+            ) {
 
                 sh '''
+
                 echo "======================================="
-                echo "DEPENDENCY CHECK"
+                echo "OWASP DEPENDENCY CHECK"
                 echo "======================================="
 
-                echo "WORKSPACE:"
-                echo $WORKSPACE
+                echo ""
+                echo "Workspace"
+                echo "$WORKSPACE"
 
                 pwd
 
                 mkdir -p reports
 
+                echo ""
+                echo "Dependency Check Cache"
+
+                ls -lah /data/jenkins/dependency-check-data || true
+
+                echo ""
+
+                echo "Cache Size"
+
+                du -sh /data/jenkins/dependency-check-data || true
+
+                echo ""
+
+                echo "Running Dependency Check..."
+
                 docker run --rm \
                   -v "$WORKSPACE":/src \
                   -v /data/jenkins/dependency-check-data:/usr/share/dependency-check/data \
-                  owasp/dependency-check:latest \
-                  --nvdApiKey ${NVD_API_KEY} \
+                  owasp/dependency-check:12.1.8 \
+                  --nvdApiKey "${NVD_API_KEY}" \
                   --scan /src \
                   --format HTML \
                   --out /src/reports
 
+                echo ""
+
+                echo "Generated Reports"
+
                 ls -lah reports || true
+
                 '''
             }
         }
@@ -187,7 +230,7 @@ stages {
             docker run --rm \
               -v "$WORKSPACE":/workspace \
               -v /data/jenkins/trivy-cache:/root/.cache/trivy \
-              aquasec/trivy:latest \
+              aquasec/trivy:0.65.0 \
               fs \
               --severity HIGH,CRITICAL \
               /workspace
@@ -221,7 +264,7 @@ stages {
             docker run --rm \
               -v /var/run/docker.sock:/var/run/docker.sock \
               -v /data/jenkins/trivy-cache:/root/.cache/trivy \
-              aquasec/trivy:latest \
+              aquasec/trivy:0.65.0 \
               image \
               --severity HIGH,CRITICAL \
               --exit-code 0 \

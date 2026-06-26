@@ -571,6 +571,18 @@ Security Rating = A
 
 Security Hotspots Reviewed = 100%
 
+
+After creating quality gate, make the quality gate the default quality gate
+
+
+Then attach Quality gate to your current project 
+
+steps : Go to your project and select "project settings"
+
+select quality Gate
+
+Choose which quality gate is associated with this project  : select  "Always use a specific Quality Gate"
+
 ---
 
 # Webhook Configuration
@@ -591,6 +603,11 @@ URL:
 
 ```text
 http://<jenkins-url>/sonarqube-webhook/
+
+since they are in thesame coker network  we can use jenkins direct name . like this 
+
+http://jenkin:8080/sonarqube-webhook/
+
 ```
 
 ---
@@ -621,7 +638,7 @@ Website:
 https://nvd.nist.gov/developers/request-an-api-key
 ```
 
-Request:
+Request a free key
 
 ```text
 Free NVD API Key
@@ -633,14 +650,18 @@ Received:
 NVD API Key
 ```
 
+After receiving the key, verify the key on their website. This key is used for OWASP dependency check 
+
+After verification, you wll be given the API key
+copy this key and store it as a secret inside secret manager or as a credential inside Jenkins credential storage, for this project we willbe using Jenkins Credential but we will improve it later 
 ---
 
-# Jenkins Credential Storage
+# Store the API key in Jekins Credential
 
 Credential Type:
 
 ```text
-Secret Text
+Paste NVD Secret Text
 ```
 
 Credential ID:
