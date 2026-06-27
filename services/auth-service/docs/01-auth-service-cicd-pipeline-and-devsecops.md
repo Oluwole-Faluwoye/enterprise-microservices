@@ -427,7 +427,7 @@ Projects
 
 Create Project
 
-Project:
+ Project:
 
 ```text
 auth-service
@@ -599,6 +599,9 @@ Configuration
 
 Webhooks
 
+
+Name : jenkins-webhook
+
 URL:
 
 ```text
@@ -661,16 +664,10 @@ copy this key and store it as a secret inside secret manager or as a credential 
 Credential Type:
 
 ```text
-Paste NVD Secret Text
+Secret Text
 ```
 
-Credential ID:
-
-```text
-nvd-api-key
-```
-
----
+Credential ID: nvd-api-key
 
 # Enterprise Secret Handling
 
