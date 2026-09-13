@@ -21,8 +21,27 @@ management:
 
       show-details: always
 
+      probes:
+        enabled: true
+
+  health:
+
+    livenessstate:
+      enabled: true
+
+    readinessstate:
+      enabled: true
+
+  prometheus:
+
+    metrics:
+
+      export:
+
+        enabled: true
+
   metrics:
 
     tags:
 
-      application: auth-service
+      application: ${spring.application.name}

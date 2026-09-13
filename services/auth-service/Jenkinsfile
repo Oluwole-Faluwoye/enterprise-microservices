@@ -322,8 +322,7 @@ stages {
 
             cd enterprise-platform-gitops
 
-            sed -i "s|^[[:space:]]*tag:.*|  tag: \"${IMAGE_TAG}\"|" \
-              charts/auth-service/values-dev.yaml
+            yq e -i '.image.tag = env(IMAGE_TAG)' charts/auth-service/values-dev.yaml
 
             git config user.email "jenkins@platform.local"
 
