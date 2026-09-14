@@ -1,2 +1,6 @@
+com\platform\auth\config\AwsSecretsManagerCredentialProvider.class
+com\platform\auth\config\DatabaseCredentialProvider.class
 com\platform\auth\AuthApplication.class
+com\platform\auth\config\DatabaseCredentials.class
+com\platform\auth\config\DatabaseConfig.class
 com\platform\auth\controller\HealthController.class
