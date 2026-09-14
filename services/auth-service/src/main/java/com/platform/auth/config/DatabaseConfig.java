@@ -1,5 +1,6 @@
 package com.platform.auth.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -7,6 +8,11 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import javax.sql.DataSource;
 
 @Configuration
+@ConditionalOnProperty(
+        name = "app.database.enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class DatabaseConfig {
 
     @Bean
