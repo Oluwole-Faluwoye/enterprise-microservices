@@ -30,379 +30,394 @@ pipeline {
         SERVICE_DIR = "services/auth-service"
     }
 
-options {
+    options {
 
-    timestamps()
+        timestamps()
 
-    disableConcurrentBuilds()
+        disableConcurrentBuilds()
 
-    buildDiscarder(
-        logRotator(
-            numToKeepStr: '20'
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '20'
+            )
         )
-    )
 
-    ansiColor('xterm')
-}
-
-stages {
-
-    stage('Checkout') {
-
-        steps {
-
-            echo "Checking out source code..."
-
-            checkout scm
-        }
+        ansiColor('xterm')
     }
 
-    stage('Build & Unit Tests') {
+    stages {
 
-        agent {
+        stage('Checkout') {
 
-            docker {
+            steps {
 
-                image 'maven:3.9-eclipse-temurin-21'
+                echo "Checking out source code..."
 
-                args '--network devops-network -v $HOME/.m2:/root/.m2'
-
-                reuseNode true
+                checkout scm
             }
         }
 
-        steps {
+        stage('Build & Unit Tests') {
 
-            dir("${SERVICE_DIR}") {
+            agent {
 
-            sh '''
-                mvn clean verify
-            '''
-        }
+                docker {
 
-    }
+                    image 'maven:3.9-eclipse-temurin-21'
 
-        post {
+                    args '--network devops-network -v $HOME/.m2:/root/.m2'
 
-            always {
-
-                junit(
-                    testResults: 'services/auth-service/target/surefire-reports/*.xml',
-                    allowEmptyResults: true
-                )
+                    reuseNode true
+                }
             }
-        }
-    }
 
-    stage('SonarQube Analysis') {
-
-        agent {
-            docker {
-                image 'maven:3.9-eclipse-temurin-21'
-                args '--network devops-network -v $HOME/.m2:/root/.m2'
-                reuseNode true
-            }
-        }
-
-        steps {
-
-            withSonarQubeEnv("${SONARQUBE_ENV}") {
+            steps {
 
                 dir("${SERVICE_DIR}") {
 
+                    sh '''
+                        mvn clean verify
+                    '''
+                }
+            }
+
+            post {
+
+                always {
+
+                    junit(
+                        testResults: 'services/auth-service/target/surefire-reports/*.xml',
+                        allowEmptyResults: true
+                    )
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+
+            agent {
+
+                docker {
+
+                    image 'maven:3.9-eclipse-temurin-21'
+
+                    args '--network devops-network -v $HOME/.m2:/root/.m2'
+
+                    reuseNode true
+                }
+            }
+
+            steps {
+
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+
+                    dir("${SERVICE_DIR}") {
+
+                        sh '''
+                            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                                -Dsonar.projectKey=auth-service \
+                                -Dsonar.projectName=auth-service
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+
+            steps {
+
+                timeout(
+                    time: 5,
+                    unit: 'MINUTES'
+                ) {
+
+                    waitForQualityGate(
+                        abortPipeline: true
+                    )
+                }
+            }
+        }
+
+        stage('OWASP Dependency Check') {
+
+            when {
+
+                expression {
+
+                    return params.RUN_OWASP_SCAN
+                }
+            }
+
+            options {
+
+                timeout(
+                    time: 15,
+                    unit: 'MINUTES'
+                )
+            }
+
+            steps {
+
+                withCredentials([
+                    string(
+                        credentialsId: 'nvd-api-key',
+                        variable: 'NVD_API_KEY'
+                    )
+                ]) {
+
+                    catchError(
+                        buildResult: 'SUCCESS',
+                        stageResult: 'UNSTABLE'
+                    ) {
+
+                        sh '''
+
+                            echo "======================================="
+                            echo "OWASP DEPENDENCY CHECK"
+                            echo "======================================="
+
+                            echo ""
+                            echo "Workspace"
+
+                            echo "$WORKSPACE"
+
+                            pwd
+
+                            mkdir -p reports
+
+                            echo ""
+                            echo "Dependency Check Cache"
+
+                            ls -lah /data/jenkins/dependency-check-data || true
+
+                            echo ""
+
+                            echo "Cache Size"
+
+                            du -sh /data/jenkins/dependency-check-data || true
+
+                            echo ""
+
+                            echo "Running Dependency Check..."
+
+                            docker run --rm \
+                              -v "$WORKSPACE":/src \
+                              -v /data/jenkins/dependency-check-data:/usr/share/dependency-check/data \
+                              owasp/dependency-check:12.1.8 \
+                              --nvdApiKey "${NVD_API_KEY}" \
+                              --scan /src \
+                              --format HTML \
+                              --out /src/reports
+
+                            echo ""
+
+                            echo "Generated Reports"
+
+                            ls -lah reports || true
+
+                        '''
+                    }
+                }
+            }
+
+            post {
+
+                always {
+
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'reports',
+                        reportFiles: 'dependency-check-report.html',
+                        reportName: 'OWASP Dependency Check Report'
+                    ])
+                }
+            }
+        }
+
+        stage('Trivy Filesystem Scan') {
+
+            steps {
+
                 sh '''
-                    mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                        -Dsonar.projectKey=auth-service \
-                        -Dsonar.projectName=auth-service
+
+                    docker run --rm \
+                      -v "$WORKSPACE":/workspace \
+                      -v /data/jenkins/trivy-cache:/root/.cache/trivy \
+                      aquasec/trivy:0.65.0 \
+                      fs \
+                      --severity HIGH,CRITICAL \
+                      /workspace
+
                 '''
             }
         }
-    }
 
-}
+        stage('Build Docker Image') {
 
+            steps {
 
-    stage('Quality Gate') {
+                dir("${SERVICE_DIR}") {
 
-        steps {
+                    sh '''
 
-            timeout(time: 5, unit: 'MINUTES') {
+                        docker build \
+                          -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
-                waitForQualityGate abortPipeline: true
+                    '''
+                }
             }
         }
-    }
 
-    stage('OWASP Dependency Check') {
+        stage('Trivy Container Scan') {
 
-    when {
-        expression {
-            return params.RUN_OWASP_SCAN
-        }
-    }
-
-    options {
-        timeout(time: 15, unit: 'MINUTES')
-    }
-
-    steps {
-
-        withCredentials([
-            string(
-                credentialsId: 'nvd-api-key',
-                variable: 'NVD_API_KEY'
-            )
-        ]) {
-
-            catchError(
-                buildResult: 'SUCCESS',
-                stageResult: 'UNSTABLE'
-            ) {
+            steps {
 
                 sh '''
 
-                echo "======================================="
-                echo "OWASP DEPENDENCY CHECK"
-                echo "======================================="
-
-                echo ""
-                echo "Workspace"
-                echo "$WORKSPACE"
-
-                pwd
-
-                mkdir -p reports
-
-                echo ""
-                echo "Dependency Check Cache"
-
-                ls -lah /data/jenkins/dependency-check-data || true
-
-                echo ""
-
-                echo "Cache Size"
-
-                du -sh /data/jenkins/dependency-check-data || true
-
-                echo ""
-
-                echo "Running Dependency Check..."
-
-                docker run --rm \
-                  -v "$WORKSPACE":/src \
-                  -v /data/jenkins/dependency-check-data:/usr/share/dependency-check/data \
-                  owasp/dependency-check:12.1.8 \
-                  --nvdApiKey "${NVD_API_KEY}" \
-                  --scan /src \
-                  --format HTML \
-                  --out /src/reports
-
-                echo ""
-
-                echo "Generated Reports"
-
-                ls -lah reports || true
+                    docker run --rm \
+                      -v /var/run/docker.sock:/var/run/docker.sock \
+                      -v /data/jenkins/trivy-cache:/root/.cache/trivy \
+                      aquasec/trivy:0.65.0 \
+                      image \
+                      --severity HIGH,CRITICAL \
+                      --exit-code 0 \
+                      ${IMAGE_NAME}:${IMAGE_TAG}
 
                 '''
+            }
+        }
+
+        stage('Login To ECR') {
+
+            steps {
+
+                sh '''
+
+                    aws ecr get-login-password \
+                      --region ${AWS_REGION} \
+                    | docker login \
+                      --username AWS \
+                      --password-stdin \
+                      ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+                '''
+            }
+        }
+
+        stage('Push Image To ECR') {
+
+            steps {
+
+                sh '''
+
+                    docker tag \
+                      ${IMAGE_NAME}:${IMAGE_TAG} \
+                      ${ECR_REPO}:${IMAGE_TAG}
+
+                    docker push \
+                      ${ECR_REPO}:${IMAGE_TAG}
+
+                '''
+            }
+        }
+
+        stage('Update GitOps Repository') {
+
+            steps {
+
+                sshagent(['github-ssh']) {
+
+                    sh '''
+
+                        echo "======================================="
+                        echo "CONFIGURE TEMP DIRECTORY"
+                        echo "======================================="
+
+                        export TMPDIR="$HOME/yq-tmp"
+
+                        mkdir -p "$TMPDIR"
+
+                        chmod 700 "$TMPDIR"
+
+                        echo "TMPDIR=$TMPDIR"
+
+                        ls -ld "$TMPDIR"
+
+
+                        echo "======================================="
+                        echo "CLONE GITOPS REPOSITORY"
+                        echo "======================================="
+
+                        rm -rf enterprise-platform-gitops
+
+                        git clone ${GITOPS_REPO}
+
+                        cd enterprise-platform-gitops
+
+
+                        echo "======================================="
+                        echo "UPDATE AUTH-SERVICE IMAGE TAG"
+                        echo "======================================="
+
+                        yq e -i '.image.tag = env(IMAGE_TAG)' \
+                            charts/auth-service/values-dev.yaml
+
+
+                        echo "======================================="
+                        echo "VERIFY IMAGE TAG"
+                        echo "======================================="
+
+                        yq e '.image.tag' \
+                            charts/auth-service/values-dev.yaml
+
+
+                        echo "======================================="
+                        echo "COMMIT GITOPS CHANGE"
+                        echo "======================================="
+
+                        git config user.email "jenkins@platform.local"
+
+                        git config user.name "Jenkins"
+
+                        git add charts/auth-service/values-dev.yaml
+
+                        git commit -m "Deploy auth-service image ${IMAGE_TAG}" || true
+
+                        git push origin main
+
+                    '''
+                }
             }
         }
     }
 
     post {
 
+        success {
+
+            echo "Build completed successfully."
+
+            sh '''
+                docker image prune -f || true
+            '''
+        }
+
+        failure {
+
+            echo "Build failed."
+        }
+
         always {
 
-            publishHTML([
-                allowMissing: true,
-                alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'reports',
-                reportFiles: 'dependency-check-report.html',
-                reportName: 'OWASP Dependency Check Report'
-            ])
+            archiveArtifacts(
+                artifacts: 'reports/**/*.*',
+                allowEmptyArchive: true
+            )
+
+            cleanWs()
         }
     }
-}
-
-    stage('Trivy Filesystem Scan') {
-
-        steps {
-
-            sh '''
-            docker run --rm \
-              -v "$WORKSPACE":/workspace \
-              -v /data/jenkins/trivy-cache:/root/.cache/trivy \
-              aquasec/trivy:0.65.0 \
-              fs \
-              --severity HIGH,CRITICAL \
-              /workspace
-            '''
-        }
-    }
-
-    stage('Build Docker Image') {
-
-        steps {
-
-            dir("${SERVICE_DIR}") {
-
-            sh '''
-
-            docker build \
-              -t ${IMAGE_NAME}:${IMAGE_TAG} .
-
-            '''
-        }
-    }
-
-}
-
-    stage('Trivy Container Scan') {
-
-        steps {
-
-            sh '''
-
-            docker run --rm \
-              -v /var/run/docker.sock:/var/run/docker.sock \
-              -v /data/jenkins/trivy-cache:/root/.cache/trivy \
-              aquasec/trivy:0.65.0 \
-              image \
-              --severity HIGH,CRITICAL \
-              --exit-code 0 \
-              ${IMAGE_NAME}:${IMAGE_TAG}
-
-            '''
-        }
-    }
-
-    stage('Login To ECR') {
-
-        steps {
-
-            sh '''
-
-            aws ecr get-login-password \
-              --region ${AWS_REGION} \
-            | docker login \
-              --username AWS \
-              --password-stdin \
-              ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
-
-            '''
-        }
-    }
-
-    stage('Push Image To ECR') {
-
-        steps {
-
-            sh '''
-
-            docker tag \
-              ${IMAGE_NAME}:${IMAGE_TAG} \
-              ${ECR_REPO}:${IMAGE_TAG}
-
-            docker push \
-              ${ECR_REPO}:${IMAGE_TAG}
-
-            '''
-        }
-    }
-
-    stage('Update GitOps Repository') {
-
-        steps {
-
-            sshagent(['github-ssh']) {
-
-                sh '''
-
-                echo "======================================="
-                echo "CONFIGURE TEMP DIRECTORY"
-                echo "======================================="
-
-                export TMPDIR="$HOME/yq-tmp"
-
-                mkdir -p "$TMPDIR"
-
-                chmod 700 "$TMPDIR"
-
-                echo "TMPDIR=$TMPDIR"
-
-                ls -ld "$TMPDIR"
-
-
-                echo "======================================="
-                echo "CLONE GITOPS REPOSITORY"
-                echo "======================================="
-
-                rm -rf enterprise-platform-gitops
-
-                git clone ${GITOPS_REPO}
-
-                cd enterprise-platform-gitops
-
-
-                echo "======================================="
-                echo "UPDATE AUTH-SERVICE IMAGE TAG"
-                echo "======================================="
-
-                yq e -i '.image.tag = env(IMAGE_TAG)' \
-                    charts/auth-service/values-dev.yaml
-
-
-                echo "======================================="
-                echo "VERIFY IMAGE TAG"
-                echo "======================================="
-
-                yq e '.image.tag' \
-                    charts/auth-service/values-dev.yaml
-
-
-                echo "======================================="
-                echo "COMMIT GITOPS CHANGE"
-                echo "======================================="
-
-                git config user.email "jenkins@platform.local"
-
-                git config user.name "Jenkins"
-
-                git add charts/auth-service/values-dev.yaml
-
-                git commit -m "Deploy auth-service image ${IMAGE_TAG}" || true
-
-                git push origin main
-
-                '''
-            }
-        }
-    }
-
-post {
-
-    success {
-
-        echo "Build completed successfully."
-
-        sh '''
-            docker image prune -f || true
-        '''
-    }
-
-    failure {
-
-        echo "Build failed."
-    }
-
-    always {
-
-        archiveArtifacts artifacts: 'reports/**/*.*', allowEmptyArchive: true
-
-        cleanWs()
-    }
-}
-
-}
-
 }
