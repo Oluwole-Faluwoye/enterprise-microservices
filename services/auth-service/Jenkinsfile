@@ -312,36 +312,72 @@ stages {
 
     stage('Update GitOps Repository') {
 
-    steps {
+        steps {
 
-        sshagent(['github-ssh']) {
+            sshagent(['github-ssh']) {
 
-            sh '''
+                sh '''
 
-            rm -rf enterprise-platform-gitops
+                echo "======================================="
+                echo "CONFIGURE TEMP DIRECTORY"
+                echo "======================================="
 
-            git clone ${GITOPS_REPO}
+                export TMPDIR="$HOME/yq-tmp"
 
-            cd enterprise-platform-gitops
+                mkdir -p "$TMPDIR"
 
-            yq e -i '.image.tag = env(IMAGE_TAG)' charts/auth-service/values-dev.yaml
+                chmod 700 "$TMPDIR"
 
-            git config user.email "jenkins@platform.local"
+                echo "TMPDIR=$TMPDIR"
 
-            git config user.name "Jenkins"
+                ls -ld "$TMPDIR"
 
-            git add charts/auth-service/values-dev.yaml
 
-            git commit -m "Deploy auth-service image ${IMAGE_TAG}" || true
+                echo "======================================="
+                echo "CLONE GITOPS REPOSITORY"
+                echo "======================================="
 
-            git push origin main
+                rm -rf enterprise-platform-gitops
 
-            '''
+                git clone ${GITOPS_REPO}
+
+                cd enterprise-platform-gitops
+
+
+                echo "======================================="
+                echo "UPDATE AUTH-SERVICE IMAGE TAG"
+                echo "======================================="
+
+                yq e -i '.image.tag = env(IMAGE_TAG)' \
+                    charts/auth-service/values-dev.yaml
+
+
+                echo "======================================="
+                echo "VERIFY IMAGE TAG"
+                echo "======================================="
+
+                yq e '.image.tag' \
+                    charts/auth-service/values-dev.yaml
+
+
+                echo "======================================="
+                echo "COMMIT GITOPS CHANGE"
+                echo "======================================="
+
+                git config user.email "jenkins@platform.local"
+
+                git config user.name "Jenkins"
+
+                git add charts/auth-service/values-dev.yaml
+
+                git commit -m "Deploy auth-service image ${IMAGE_TAG}" || true
+
+                git push origin main
+
+                '''
+            }
         }
     }
-}
-
-}
 
 post {
 
