@@ -13,7 +13,7 @@ import org.springframework.test.context.TestPropertySource;
 @TestPropertySource(properties = {
         "app.database.enabled=false"
 })
-class AuthApplicationTests {
+class AuthSeApplicationTests {
 
     @Test
     void contextLoads() {
