@@ -8,6 +8,16 @@ import org.springframework.stereotype.Component;
 public class LocalEnvironmentCredentialProvider
         implements DatabaseCredentialProvider {
 
+    private final EnvironmentProvider environmentProvider;
+
+    public LocalEnvironmentCredentialProvider() {
+        this(System::getenv);
+    }
+
+    LocalEnvironmentCredentialProvider(EnvironmentProvider environmentProvider) {
+        this.environmentProvider = environmentProvider;
+    }
+
     @Override
     public DatabaseCredentials getCredentials() {
         String username = requiredEnv("DB_USERNAME");
@@ -17,7 +27,7 @@ public class LocalEnvironmentCredentialProvider
     }
 
     private String requiredEnv(String name) {
-        String value = System.getenv(name);
+        String value = environmentProvider.get(name);
 
         if (value == null || value.isBlank()) {
             throw new IllegalStateException(
