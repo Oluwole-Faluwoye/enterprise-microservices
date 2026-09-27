@@ -59,6 +59,18 @@
         <scope>runtime</scope>
     </dependency>
 
+    <!-- Flyway database migrations -->
+    <dependency>
+        <groupId>org.flywaydb</groupId>
+        <artifactId>flyway-core</artifactId>
+    </dependency>
+
+    <!-- PostgreSQL support for Flyway -->
+    <dependency>
+        <groupId>org.flywaydb</groupId>
+        <artifactId>flyway-database-postgresql</artifactId>
+    </dependency>
+
     <!-- AWS SDK -->
     <dependency>
         <groupId>software.amazon.awssdk</groupId>

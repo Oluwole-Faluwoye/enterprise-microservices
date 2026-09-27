@@ -5,6 +5,10 @@ spring:
   application:
     name: auth-service
 
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
 management:
 
   endpoints:

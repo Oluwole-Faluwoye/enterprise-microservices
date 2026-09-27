@@ -1,0 +1,15 @@
+# Maven build output
+**/target/
+
+# Java/JVM crash logs
+hs_err_pid*.log
+replay_pid*.log
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -7,8 +7,10 @@ import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
 import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest;
+import org.springframework.context.annotation.Profile;
 
 @Component
+@Profile("aws")
 public class AwsSecretsManagerCredentialProvider
         implements DatabaseCredentialProvider {
 
