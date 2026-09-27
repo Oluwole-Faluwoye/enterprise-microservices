@@ -366,7 +366,7 @@ pipeline {
                         echo "Platform environment configuration:"
                         cat "${PLATFORM_ENV_FILE}"
 
-                        export ARTIFACT_BUCKET=$(yq e -r '.artifactStore.bucket // empty' "${PLATFORM_ENV_FILE}")
+                        export ARTIFACT_BUCKET=$(yq e -r '.artifactStore.bucket' "${PLATFORM_ENV_FILE}")
 
                         if [ -z "${ARTIFACT_BUCKET}" ]; then
                             echo "ERROR: artifactStore.bucket is missing."
