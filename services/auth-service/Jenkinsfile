@@ -611,7 +611,7 @@ pipeline {
 
                         if [ "${MIGRATION_ENABLED}" = "true" ]; then
 
-                            MIGRATION_KEY="${IMAGE_NAME}/migrations/${GIT_COMMIT}/db/migration"
+                            export MIGRATION_KEY="${IMAGE_NAME}/migrations/${GIT_COMMIT}/db/migration"
 
                             yq e -i \
                                 '.migration.enabled = true |
