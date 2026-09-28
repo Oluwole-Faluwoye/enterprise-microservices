@@ -49,3 +49,8 @@ management:
     tags:
 
       application: ${spring.application.name}
+
+app:
+  database:
+    enabled: true
+    credential-provider: managed

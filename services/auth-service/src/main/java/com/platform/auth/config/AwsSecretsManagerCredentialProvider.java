@@ -2,6 +2,7 @@ package com.platform.auth.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -10,7 +11,10 @@ import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueReques
 import org.springframework.context.annotation.Profile;
 
 @Component
-@Profile("aws")
+@ConditionalOnProperty(
+        name = "app.database.credential-provider",
+        havingValue = "managed"
+)
 public class AwsSecretsManagerCredentialProvider
         implements DatabaseCredentialProvider {
 
