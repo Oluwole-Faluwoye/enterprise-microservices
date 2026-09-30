@@ -1,0 +1,18 @@
+service:
+  name: orders-service
+  team: commerce
+
+runtime:
+  type: nodejs
+  version: "22"
+
+persistence:
+  enabled: true
+  mode: new
+  engine: postgres
+  size: small
+  database_name: ordersdb
+
+migration:
+  enabled: true
+  engine: flyway

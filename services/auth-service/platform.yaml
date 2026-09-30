@@ -1,0 +1,18 @@
+service:
+  name: auth-service
+  team: identity
+
+runtime:
+  type: spring-boot
+  version: "21"
+
+persistence:
+  enabled: true
+  mode: new
+  engine: postgres
+  size: small
+  database_name: authdb
+
+migration:
+  enabled: true
+  engine: flyway

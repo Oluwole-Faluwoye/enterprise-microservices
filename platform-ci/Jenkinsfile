@@ -1,0 +1,242 @@
+pipeline {
+
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '20'
+            )
+        )
+
+        ansiColor('xterm')
+    }
+
+    parameters {
+
+        string(
+            name: 'SERVICE_DIR',
+            defaultValue: 'services/auth-service',
+            description: 'Service directory'
+        )
+    }
+
+    stages {
+
+        stage('Checkout') {
+
+            steps {
+
+                echo "Checking out source code..."
+
+                checkout scm
+
+                echo "Git commit: ${GIT_COMMIT}"
+            }
+        }
+
+        stage('Validate Service Contract') {
+
+            steps {
+
+                script {
+
+                    def manifest = "${params.SERVICE_DIR}/platform.yaml"
+
+                    if (!fileExists(manifest)) {
+
+                        error(
+                            "Missing platform.yaml: ${manifest}"
+                        )
+                    }
+
+                    sh """
+                        set -euo pipefail
+
+                        echo "======================================="
+                        echo "VALIDATE SERVICE CONTRACT"
+                        echo "======================================="
+
+                        yq e '.' '${manifest}' >/dev/null
+
+                        SERVICE_NAME=\$(yq e -r '.service.name // ""' '${manifest}')
+                        SERVICE_TEAM=\$(yq e -r '.service.team // ""' '${manifest}')
+                        SERVICE_RUNTIME=\$(yq e -r '.runtime.type // ""' '${manifest}')
+                        RUNTIME_VERSION=\$(yq e -r '.runtime.version // ""' '${manifest}')
+
+                        if [ -z "\${SERVICE_NAME}" ]; then
+                            echo "ERROR: service.name is missing."
+                            exit 1
+                        fi
+
+                        if [ -z "\${SERVICE_TEAM}" ]; then
+                            echo "ERROR: service.team is missing."
+                            exit 1
+                        fi
+
+                        if [ -z "\${SERVICE_RUNTIME}" ]; then
+                            echo "ERROR: runtime.type is missing."
+                            exit 1
+                        fi
+
+                        if [ -z "\${RUNTIME_VERSION}" ]; then
+                            echo "ERROR: runtime.version is missing."
+                            exit 1
+                        fi
+
+                        case "\${SERVICE_RUNTIME}" in
+
+                            nodejs)
+                                ;;
+
+                            spring-boot)
+                                ;;
+
+                            *)
+                                echo "ERROR: Unsupported runtime: \${SERVICE_RUNTIME}"
+                                exit 1
+                                ;;
+                        esac
+
+                        echo "Service name     : \${SERVICE_NAME}"
+                        echo "Team             : \${SERVICE_TEAM}"
+                        echo "Runtime          : \${SERVICE_RUNTIME}"
+                        echo "Runtime version  : \${RUNTIME_VERSION}"
+
+                        echo "Service contract validated successfully."
+                    """
+
+                    env.SERVICE_RUNTIME = sh(
+                        script: "yq e -r '.runtime.type' '${manifest}'",
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+        }
+
+        stage('Build & Unit Tests') {
+
+            steps {
+
+                script {
+
+                    if (env.SERVICE_RUNTIME == 'nodejs') {
+
+                        docker.image('node:22-alpine').inside {
+
+                            dir("${params.SERVICE_DIR}") {
+
+                                sh '''
+                                    set -euo pipefail
+
+                                    npm ci
+                                    npm test --if-present
+                                '''
+                            }
+                        }
+
+                    } else if (env.SERVICE_RUNTIME == 'spring-boot') {
+
+                        docker.image(
+                            'maven:3.9-eclipse-temurin-21'
+                        ).inside {
+
+                            dir("${params.SERVICE_DIR}") {
+
+                                sh '''
+                                    set -euo pipefail
+
+                                    mvn clean verify
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Platform Contract Validation') {
+
+            steps {
+
+                script {
+
+                    if (env.SERVICE_RUNTIME == 'nodejs') {
+
+                        docker.image('node:22-alpine').inside {
+
+                            dir("${params.SERVICE_DIR}") {
+
+                                sh '''
+                                    set -euo pipefail
+
+                                    npm ci
+                                    npm run test:platform
+                                '''
+                            }
+                        }
+
+                    } else if (env.SERVICE_RUNTIME == 'spring-boot') {
+
+                        docker.image(
+                            'maven:3.9-eclipse-temurin-21'
+                        ).inside {
+
+                            dir("${params.SERVICE_DIR}") {
+
+                                sh '''
+                                    set -euo pipefail
+
+                                    mvn -Dtest=PlatformContractTest test
+                                '''
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+
+            steps {
+
+                script {
+
+                    dir("${params.SERVICE_DIR}") {
+
+                        sh '''
+                            set -euo pipefail
+
+                            echo "Docker build would run here."
+
+                            docker build \
+                                -t "${JOB_NAME}:${BUILD_NUMBER}" \
+                                .
+                        '''
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+
+        success {
+
+            echo "Platform CI pipeline completed successfully."
+        }
+
+        failure {
+
+            echo "Platform CI pipeline failed."
+        }
+
+        always {
+
+            cleanWs()
+        }
+    }
+}
