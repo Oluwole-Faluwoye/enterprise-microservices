@@ -103,6 +103,39 @@ pipeline {
             }
         }
 
+        stage('Platform Contract Validation') {
+
+            agent {
+
+                docker {
+
+                    image 'maven:3.9-eclipse-temurin-21'
+
+                    args '--network devops-network -v $HOME/.m2:/root/.m2'
+
+                    reuseNode true
+                }
+            }
+
+            steps {
+
+                dir("${SERVICE_DIR}") {
+
+                    sh '''
+                        set -euo pipefail
+
+                        echo "======================================="
+                        echo "PLATFORM CONTRACT VALIDATION"
+                        echo "======================================="
+
+                        mvn -Dtest=PlatformContractTest test
+
+                        echo "Platform runtime contract validated successfully."
+                    '''
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
 
             agent {
