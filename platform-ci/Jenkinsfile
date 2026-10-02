@@ -47,10 +47,7 @@ pipeline {
                     def manifest = "${params.SERVICE_DIR}/platform.yaml"
 
                     if (!fileExists(manifest)) {
-
-                        error(
-                            "Missing platform.yaml: ${manifest}"
-                        )
+                        error("Missing platform.yaml: ${manifest}")
                     }
 
                     sh """
@@ -64,8 +61,22 @@ pipeline {
 
                         SERVICE_NAME=\$(yq e -r '.service.name // ""' '${manifest}')
                         SERVICE_TEAM=\$(yq e -r '.service.team // ""' '${manifest}')
+
                         SERVICE_RUNTIME=\$(yq e -r '.runtime.type // ""' '${manifest}')
                         RUNTIME_VERSION=\$(yq e -r '.runtime.version // ""' '${manifest}')
+
+                        PERSISTENCE_ENABLED=\$(yq e -r '.persistence.enabled // false' '${manifest}')
+                        PERSISTENCE_MODE=\$(yq e -r '.persistence.mode // ""' '${manifest}')
+                        PERSISTENCE_ENGINE=\$(yq e -r '.persistence.engine // ""' '${manifest}')
+                        PERSISTENCE_SIZE=\$(yq e -r '.persistence.size // ""' '${manifest}')
+                        DATABASE_NAME=\$(yq e -r '.persistence.database_name // ""' '${manifest}')
+
+                        MIGRATION_ENABLED=\$(yq e -r '.migration.enabled // false' '${manifest}')
+                        MIGRATION_ENGINE=\$(yq e -r '.migration.engine // ""' '${manifest}')
+
+
+                        echo ""
+                        echo "Checking service identity..."
 
                         if [ -z "\${SERVICE_NAME}" ]; then
                             echo "ERROR: service.name is missing."
@@ -76,6 +87,9 @@ pipeline {
                             echo "ERROR: service.team is missing."
                             exit 1
                         fi
+
+
+                        echo "Checking runtime..."
 
                         if [ -z "\${SERVICE_RUNTIME}" ]; then
                             echo "ERROR: runtime.type is missing."
@@ -99,13 +113,88 @@ pipeline {
                                 echo "ERROR: Unsupported runtime: \${SERVICE_RUNTIME}"
                                 exit 1
                                 ;;
+
                         esac
 
-                        echo "Service name     : \${SERVICE_NAME}"
-                        echo "Team             : \${SERVICE_TEAM}"
-                        echo "Runtime          : \${SERVICE_RUNTIME}"
-                        echo "Runtime version  : \${RUNTIME_VERSION}"
 
+                        echo "Checking persistence..."
+
+                        if [ "\${PERSISTENCE_ENABLED}" = "true" ]; then
+
+                            case "\${PERSISTENCE_MODE}" in
+                                new|existing|shared|temporary)
+                                    ;;
+                                *)
+                                    echo "ERROR: Invalid persistence.mode: \${PERSISTENCE_MODE}"
+                                    exit 1
+                                    ;;
+                            esac
+
+                            case "\${PERSISTENCE_ENGINE}" in
+                                postgres|mysql|aurora-postgres|aurora-mysql|mongodb)
+                                    ;;
+                                *)
+                                    echo "ERROR: Unsupported persistence.engine: \${PERSISTENCE_ENGINE}"
+                                    exit 1
+                                    ;;
+                            esac
+
+                            case "\${PERSISTENCE_SIZE}" in
+                                small|medium|large|xlarge)
+                                    ;;
+                                *)
+                                    echo "ERROR: Invalid persistence.size: \${PERSISTENCE_SIZE}"
+                                    exit 1
+                                    ;;
+                            esac
+
+                            if [ -z "\${DATABASE_NAME}" ]; then
+                                echo "ERROR: persistence.database_name is required when persistence is enabled."
+                                exit 1
+                            fi
+
+                        fi
+
+
+                        echo "Checking migration..."
+
+                        if [ "\${MIGRATION_ENABLED}" = "true" ]; then
+
+                            case "\${MIGRATION_ENGINE}" in
+                                flyway)
+                                    ;;
+                                *)
+                                    echo "ERROR: Unsupported migration.engine: \${MIGRATION_ENGINE}"
+                                    exit 1
+                                    ;;
+                            esac
+
+                            if [ "\${PERSISTENCE_ENABLED}" != "true" ]; then
+                                echo "ERROR: migration is enabled but persistence is disabled."
+                                exit 1
+                            fi
+
+                        fi
+
+
+                        echo ""
+                        echo "======================================="
+                        echo "SERVICE CONTRACT"
+                        echo "======================================="
+
+                        echo "Service name       : \${SERVICE_NAME}"
+                        echo "Team               : \${SERVICE_TEAM}"
+                        echo "Runtime            : \${SERVICE_RUNTIME}"
+                        echo "Runtime version    : \${RUNTIME_VERSION}"
+                        echo "Persistence        : \${PERSISTENCE_ENABLED}"
+                        echo "Database mode      : \${PERSISTENCE_MODE}"
+                        echo "Database engine    : \${PERSISTENCE_ENGINE}"
+                        echo "Database size      : \${PERSISTENCE_SIZE}"
+                        echo "Database name      : \${DATABASE_NAME}"
+                        echo "Migration enabled  : \${MIGRATION_ENABLED}"
+                        echo "Migration engine   : \${MIGRATION_ENGINE}"
+
+                        echo ""
                         echo "Service contract validated successfully."
                     """
 
