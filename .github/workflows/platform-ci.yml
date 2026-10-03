@@ -11,6 +11,12 @@ jobs:
     name: Platform Contract
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        service:
+          - services/orders-service
+          - services/auth-service
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,12 +36,14 @@ jobs:
         uses: mikefarah/yq@v4
 
       - name: Make platform CLI executable
-        run: chmod +x platform-ci/bin/platform platform-ci/lib/*.sh
-
-      - name: Validate Orders Service Contract
         run: |
-          ./platform-ci/bin/platform validate services/orders-service
+          chmod +x platform-ci/bin/platform
+          chmod +x platform-ci/lib/*.sh
 
-      - name: Test Orders Runtime Contract
+      - name: Validate Service Contract
         run: |
-          ./platform-ci/bin/platform test-runtime services/orders-service
+          ./platform-ci/bin/platform validate "${{ matrix.service }}"
+
+      - name: Test Runtime Contract
+        run: |
+          ./platform-ci/bin/platform test-runtime "${{ matrix.service }}"
