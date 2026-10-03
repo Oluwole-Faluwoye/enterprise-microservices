@@ -23,19 +23,56 @@ class PlatformContractTest {
 
     @Test
     void platformHealthContractIsSatisfied() throws Exception {
-        assertEndpointReturns200("/health/live");
-        assertEndpointReturns200("/health/ready");
+
+        assertHealthEndpointReturns200("/health/live");
+        assertHealthEndpointReturns200("/health/ready");
         assertEndpointReturns200("/metrics");
     }
 
-    private void assertEndpointReturns200(String path) throws Exception {
+    private void assertHealthEndpointReturns200(String path)
+            throws Exception {
+
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:" + port + path))
+                .uri(URI.create(
+                        "http://localhost:" + port + path
+                ))
                 .GET()
                 .build();
 
         HttpResponse<String> response =
-                client.send(request, HttpResponse.BodyHandlers.ofString());
+                client.send(
+                        request,
+                        HttpResponse.BodyHandlers.ofString()
+                );
+
+        assertEquals(
+                200,
+                response.statusCode(),
+                path + " should return HTTP 200"
+        );
+
+        assertEquals(
+                true,
+                response.body().contains("\"status\":\"UP\""),
+                path + " should report UP"
+        );
+    }
+
+    private void assertEndpointReturns200(String path)
+            throws Exception {
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(
+                        "http://localhost:" + port + path
+                ))
+                .GET()
+                .build();
+
+        HttpResponse<String> response =
+                client.send(
+                        request,
+                        HttpResponse.BodyHandlers.ofString()
+                );
 
         assertEquals(
                 200,

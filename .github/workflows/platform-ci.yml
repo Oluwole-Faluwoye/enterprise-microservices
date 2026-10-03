@@ -1,0 +1,41 @@
+name: Enterprise Platform CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  platform-contract:
+    name: Platform Contract
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install yq
+        uses: mikefarah/yq@v4
+
+      - name: Make platform CLI executable
+        run: chmod +x platform-ci/bin/platform platform-ci/lib/*.sh
+
+      - name: Validate Orders Service Contract
+        run: |
+          ./platform-ci/bin/platform validate services/orders-service
+
+      - name: Test Orders Runtime Contract
+        run: |
+          ./platform-ci/bin/platform test-runtime services/orders-service

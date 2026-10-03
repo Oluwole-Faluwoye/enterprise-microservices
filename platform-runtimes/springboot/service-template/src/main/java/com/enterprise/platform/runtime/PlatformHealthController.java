@@ -18,7 +18,8 @@ public class PlatformHealthController {
 
     @GetMapping("/health/live")
     public Map<String, String> live() {
-        HealthComponent health = healthEndpoint.health();
+        HealthComponent health =
+                healthEndpoint.healthForPath("liveness");
 
         return Map.of(
                 "status",
@@ -28,7 +29,8 @@ public class PlatformHealthController {
 
     @GetMapping("/health/ready")
     public Map<String, String> ready() {
-        HealthComponent health = healthEndpoint.health();
+        HealthComponent health =
+                healthEndpoint.healthForPath("readiness");
 
         return Map.of(
                 "status",

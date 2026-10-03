@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PLATFORM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+COMMAND="${1:-}"
+
+case "${COMMAND}" in
+
+    validate)
+        SERVICE_DIR="${2:-}"
+
+        if [ -z "${SERVICE_DIR}" ]; then
+            echo "Usage: platform validate <service-dir>"
+            exit 1
+        fi
+
+        "${PLATFORM_ROOT}/lib/validate-service.sh" "${SERVICE_DIR}"
+        ;;
+
+    test-runtime)
+        SERVICE_DIR="${2:-}"
+
+        if [ -z "${SERVICE_DIR}" ]; then
+            echo "Usage: platform test-runtime <service-dir>"
+            exit 1
+        fi
+
+        "${PLATFORM_ROOT}/lib/runtime-contract.sh" "${SERVICE_DIR}"
+        ;;
+
+    *)
+        echo "Enterprise Platform CLI"
+        echo ""
+        echo "Usage:"
+        echo "  platform validate <service-dir>"
+        echo "  platform test-runtime <service-dir>"
+        exit 1
+        ;;
+
+esac
