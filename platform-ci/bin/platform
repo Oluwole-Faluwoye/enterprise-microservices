@@ -29,6 +29,23 @@ case "${COMMAND}" in
 
         "${PLATFORM_ROOT}/lib/runtime-contract.sh" "${SERVICE_DIR}"
         ;;
+            create-service)
+        SERVICE_NAME="${2:-}"
+        RUNTIME="${3:-}"
+        SERVICE_TEAM="${4:-}"
+
+        if [ -z "${SERVICE_NAME}" ] ||
+           [ -z "${RUNTIME}" ] ||
+           [ -z "${SERVICE_TEAM}" ]; then
+            echo "Usage: platform create-service <service-name> <runtime> <team>"
+            exit 1
+        fi
+
+        "${PLATFORM_ROOT}/lib/scaffold-service.sh" \
+            "${SERVICE_NAME}" \
+            "${RUNTIME}" \
+            "${SERVICE_TEAM}"
+        ;;
 
     *)
         echo "Enterprise Platform CLI"
@@ -36,6 +53,7 @@ case "${COMMAND}" in
         echo "Usage:"
         echo "  platform validate <service-dir>"
         echo "  platform test-runtime <service-dir>"
+        echo "  platform create-service <service-name> <runtime> <team>"
         exit 1
         ;;
 

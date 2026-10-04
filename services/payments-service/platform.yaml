@@ -1,0 +1,13 @@
+service:
+  name: payments-service
+  team: payments
+
+runtime:
+  type: nodejs
+  version: "22"
+
+persistence:
+  enabled: false
+
+migration:
+  enabled: false

@@ -1,0 +1,13 @@
+service:
+  name: payments-spring-service
+  team: payments
+
+runtime:
+  type: spring-boot
+  version: "17"
+
+persistence:
+  enabled: false
+
+migration:
+  enabled: false
