@@ -29,7 +29,8 @@ case "${COMMAND}" in
 
         "${PLATFORM_ROOT}/lib/runtime-contract.sh" "${SERVICE_DIR}"
         ;;
-            create-service)
+
+    create-service)
         SERVICE_NAME="${2:-}"
         RUNTIME="${3:-}"
         SERVICE_TEAM="${4:-}"
@@ -47,6 +48,42 @@ case "${COMMAND}" in
             "${SERVICE_TEAM}"
         ;;
 
+    generate-contract)
+        OUTPUT_FILE="${2:-}"
+
+        if [ -n "${OUTPUT_FILE}" ]; then
+            "${PLATFORM_ROOT}/lib/generate-contract.sh" "${OUTPUT_FILE}"
+        else
+            "${PLATFORM_ROOT}/lib/generate-contract.sh"
+        fi
+        ;;
+
+    generate-terraform-input)
+        INPUT_FILE="${2:-}"
+        OUTPUT_FILE="${3:-}"
+
+        if [ -n "${INPUT_FILE}" ] && [ -n "${OUTPUT_FILE}" ]; then
+            "${PLATFORM_ROOT}/lib/generate-terraform-input.sh" \
+                "${INPUT_FILE}" \
+                "${OUTPUT_FILE}"
+        elif [ -n "${INPUT_FILE}" ]; then
+            "${PLATFORM_ROOT}/lib/generate-terraform-input.sh" \
+                "${INPUT_FILE}"
+        else
+            "${PLATFORM_ROOT}/lib/generate-terraform-input.sh"
+        fi
+        ;;
+
+    publish-contract)
+        INPUT_FILE="${2:-}"
+
+        if [ -n "${INPUT_FILE}" ]; then
+            "${PLATFORM_ROOT}/lib/publish-contract.sh" "${INPUT_FILE}"
+        else
+            "${PLATFORM_ROOT}/lib/publish-contract.sh"
+        fi
+        ;;
+
     *)
         echo "Enterprise Platform CLI"
         echo ""
@@ -54,6 +91,9 @@ case "${COMMAND}" in
         echo "  platform validate <service-dir>"
         echo "  platform test-runtime <service-dir>"
         echo "  platform create-service <service-name> <runtime> <team>"
+        echo "  platform generate-contract [output-file]"
+        echo "  platform generate-terraform-input [input-file] [output-file]"
+        echo "  platform publish-contract [contract-file]"
         exit 1
         ;;
 

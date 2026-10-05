@@ -2,8 +2,38 @@ pipeline {
 
     agent any
 
+    parameters {
+
+        string(
+            name: 'SERVICE_DIR',
+            defaultValue: 'services/auth-service',
+            description: 'Service directory used for runtime validation and Docker build'
+        )
+
+        string(
+            name: 'PLATFORM_ENVIRONMENT',
+            defaultValue: 'dev',
+            description: 'Platform environment'
+        )
+    }
+
+    environment {
+
+        AWS_REGION = "us-east-1"
+
+        GITOPS_REPO = "git@github.com:Oluwole-Faluwoye/enterprise-platform-gitops.git"
+
+        PLATFORM_ENV = "${params.PLATFORM_ENVIRONMENT}"
+
+        SONARQUBE_ENV = "sonarqube"
+
+        SERVICE_DIR = "${params.SERVICE_DIR}"
+    }
+
     options {
+
         timestamps()
+
         disableConcurrentBuilds()
 
         buildDiscarder(
@@ -13,15 +43,6 @@ pipeline {
         )
 
         ansiColor('xterm')
-    }
-
-    parameters {
-
-        string(
-            name: 'SERVICE_DIR',
-            defaultValue: 'services/auth-service',
-            description: 'Service directory'
-        )
     }
 
     stages {
@@ -38,6 +59,7 @@ pipeline {
             }
         }
 
+
         stage('Validate Service Contract') {
 
             steps {
@@ -53,149 +75,7 @@ pipeline {
                     sh """
                         set -euo pipefail
 
-                        echo "======================================="
-                        echo "VALIDATE SERVICE CONTRACT"
-                        echo "======================================="
-
-                        yq e '.' '${manifest}' >/dev/null
-
-                        SERVICE_NAME=\$(yq e -r '.service.name // ""' '${manifest}')
-                        SERVICE_TEAM=\$(yq e -r '.service.team // ""' '${manifest}')
-
-                        SERVICE_RUNTIME=\$(yq e -r '.runtime.type // ""' '${manifest}')
-                        RUNTIME_VERSION=\$(yq e -r '.runtime.version // ""' '${manifest}')
-
-                        PERSISTENCE_ENABLED=\$(yq e -r '.persistence.enabled // false' '${manifest}')
-                        PERSISTENCE_MODE=\$(yq e -r '.persistence.mode // ""' '${manifest}')
-                        PERSISTENCE_ENGINE=\$(yq e -r '.persistence.engine // ""' '${manifest}')
-                        PERSISTENCE_SIZE=\$(yq e -r '.persistence.size // ""' '${manifest}')
-                        DATABASE_NAME=\$(yq e -r '.persistence.database_name // ""' '${manifest}')
-
-                        MIGRATION_ENABLED=\$(yq e -r '.migration.enabled // false' '${manifest}')
-                        MIGRATION_ENGINE=\$(yq e -r '.migration.engine // ""' '${manifest}')
-
-
-                        echo ""
-                        echo "Checking service identity..."
-
-                        if [ -z "\${SERVICE_NAME}" ]; then
-                            echo "ERROR: service.name is missing."
-                            exit 1
-                        fi
-
-                        if [ -z "\${SERVICE_TEAM}" ]; then
-                            echo "ERROR: service.team is missing."
-                            exit 1
-                        fi
-
-
-                        echo "Checking runtime..."
-
-                        if [ -z "\${SERVICE_RUNTIME}" ]; then
-                            echo "ERROR: runtime.type is missing."
-                            exit 1
-                        fi
-
-                        if [ -z "\${RUNTIME_VERSION}" ]; then
-                            echo "ERROR: runtime.version is missing."
-                            exit 1
-                        fi
-
-                        case "\${SERVICE_RUNTIME}" in
-
-                            nodejs)
-                                ;;
-
-                            spring-boot)
-                                ;;
-
-                            *)
-                                echo "ERROR: Unsupported runtime: \${SERVICE_RUNTIME}"
-                                exit 1
-                                ;;
-
-                        esac
-
-
-                        echo "Checking persistence..."
-
-                        if [ "\${PERSISTENCE_ENABLED}" = "true" ]; then
-
-                            case "\${PERSISTENCE_MODE}" in
-                                new|existing|shared|temporary)
-                                    ;;
-                                *)
-                                    echo "ERROR: Invalid persistence.mode: \${PERSISTENCE_MODE}"
-                                    exit 1
-                                    ;;
-                            esac
-
-                            case "\${PERSISTENCE_ENGINE}" in
-                                postgres|mysql|aurora-postgres|aurora-mysql|mongodb)
-                                    ;;
-                                *)
-                                    echo "ERROR: Unsupported persistence.engine: \${PERSISTENCE_ENGINE}"
-                                    exit 1
-                                    ;;
-                            esac
-
-                            case "\${PERSISTENCE_SIZE}" in
-                                small|medium|large|xlarge)
-                                    ;;
-                                *)
-                                    echo "ERROR: Invalid persistence.size: \${PERSISTENCE_SIZE}"
-                                    exit 1
-                                    ;;
-                            esac
-
-                            if [ -z "\${DATABASE_NAME}" ]; then
-                                echo "ERROR: persistence.database_name is required when persistence is enabled."
-                                exit 1
-                            fi
-
-                        fi
-
-
-                        echo "Checking migration..."
-
-                        if [ "\${MIGRATION_ENABLED}" = "true" ]; then
-
-                            case "\${MIGRATION_ENGINE}" in
-                                flyway)
-                                    ;;
-                                *)
-                                    echo "ERROR: Unsupported migration.engine: \${MIGRATION_ENGINE}"
-                                    exit 1
-                                    ;;
-                            esac
-
-                            if [ "\${PERSISTENCE_ENABLED}" != "true" ]; then
-                                echo "ERROR: migration is enabled but persistence is disabled."
-                                exit 1
-                            fi
-
-                        fi
-
-
-                        echo ""
-                        echo "======================================="
-                        echo "SERVICE CONTRACT"
-                        echo "======================================="
-
-                        echo "Service name       : \${SERVICE_NAME}"
-                        echo "Team               : \${SERVICE_TEAM}"
-                        echo "Runtime            : \${SERVICE_RUNTIME}"
-                        echo "Runtime version    : \${RUNTIME_VERSION}"
-                        echo "Persistence        : \${PERSISTENCE_ENABLED}"
-                        echo "Database mode      : \${PERSISTENCE_MODE}"
-                        echo "Database engine    : \${PERSISTENCE_ENGINE}"
-                        echo "Database size      : \${PERSISTENCE_SIZE}"
-                        echo "Database name      : \${DATABASE_NAME}"
-                        echo "Migration enabled  : \${MIGRATION_ENABLED}"
-                        echo "Migration engine   : \${MIGRATION_ENGINE}"
-
-                        echo ""
-                        echo "Service contract validated successfully."
+                        ./platform-ci/bin/platform validate '${params.SERVICE_DIR}'
                     """
 
                     env.SERVICE_RUNTIME = sh(
@@ -205,6 +85,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Build & Unit Tests') {
 
@@ -242,51 +123,165 @@ pipeline {
                                 '''
                             }
                         }
+
+                    } else {
+
+                        error(
+                            "Unsupported runtime: ${env.SERVICE_RUNTIME}"
+                        )
                     }
                 }
             }
         }
+
 
         stage('Platform Contract Validation') {
 
             steps {
 
-                script {
+                sh '''
+                    set -euo pipefail
 
-                    if (env.SERVICE_RUNTIME == 'nodejs') {
+                    chmod +x platform-ci/bin/platform
+                    chmod +x platform-ci/lib/*.sh
 
-                        docker.image('node:22-alpine').inside {
+                    ./platform-ci/bin/platform test-runtime "${SERVICE_DIR}"
+                '''
+            }
+        }
 
-                            dir("${params.SERVICE_DIR}") {
 
-                                sh '''
-                                    set -euo pipefail
+        stage('Resolve Platform Environment') {
 
-                                    npm ci
-                                    npm run test:platform
-                                '''
-                            }
-                        }
+            steps {
 
-                    } else if (env.SERVICE_RUNTIME == 'spring-boot') {
+                sshagent(['github-ssh']) {
 
-                        docker.image(
-                            'maven:3.9-eclipse-temurin-21'
-                        ).inside {
+                    sh '''
+                        set -euo pipefail
 
-                            dir("${params.SERVICE_DIR}") {
+                        echo "======================================="
+                        echo "RESOLVE PLATFORM ENVIRONMENT"
+                        echo "======================================="
 
-                                sh '''
-                                    set -euo pipefail
+                        rm -rf platform-environment-gitops
 
-                                    mvn -Dtest=PlatformContractTest test
-                                '''
-                            }
-                        }
-                    }
+                        git clone \
+                            --depth 1 \
+                            "${GITOPS_REPO}" \
+                            platform-environment-gitops
+
+                        PLATFORM_ENV_FILE="platform-environment-gitops/platform/environments/${PLATFORM_ENV}.yaml"
+
+                        if [ ! -f "${PLATFORM_ENV_FILE}" ]; then
+
+                            echo "ERROR: Platform environment configuration not found:"
+                            echo "${PLATFORM_ENV_FILE}"
+
+                            exit 1
+
+                        fi
+
+                        echo ""
+                        echo "Platform environment configuration:"
+                        cat "${PLATFORM_ENV_FILE}"
+
+                        ARTIFACT_BUCKET=$(
+                            yq e -r \
+                                '.artifactStore.bucket // ""' \
+                                "${PLATFORM_ENV_FILE}"
+                        )
+
+                        if [ -z "${ARTIFACT_BUCKET}" ] ||
+                           [ "${ARTIFACT_BUCKET}" = "null" ]; then
+
+                            echo "ERROR: artifactStore.bucket is missing."
+
+                            exit 1
+
+                        fi
+
+                        echo ""
+                        echo "Platform environment : ${PLATFORM_ENV}"
+                        echo "Artifact bucket      : ${ARTIFACT_BUCKET}"
+
+                        echo "${ARTIFACT_BUCKET}" \
+                            > "${WORKSPACE}/.platform_artifact_bucket"
+
+                        echo ""
+                        echo "Platform environment resolved successfully."
+                    '''
                 }
             }
         }
+
+
+        stage('Generate Platform Contract') {
+
+            steps {
+
+                sh '''
+                    set -euo pipefail
+
+                    echo "======================================="
+                    echo "GENERATE PLATFORM CONTRACT"
+                    echo "======================================="
+
+                    chmod +x platform-ci/bin/platform
+                    chmod +x platform-ci/lib/*.sh
+
+                    ./platform-ci/bin/platform generate-contract
+
+                    echo ""
+                    echo "Generated platform contract:"
+                    cat platform-contract.json
+
+                    echo ""
+                    echo "Platform contract generated successfully."
+                '''
+            }
+        }
+
+
+        stage('Publish Platform Contract') {
+
+            steps {
+
+                sh '''
+                    set -euo pipefail
+
+                    echo "======================================="
+                    echo "PUBLISH PLATFORM CONTRACT"
+                    echo "======================================="
+
+                    ARTIFACT_BUCKET=$(
+                        cat "${WORKSPACE}/.platform_artifact_bucket"
+                    )
+
+                    if [ -z "${ARTIFACT_BUCKET}" ]; then
+
+                        echo "ERROR: Artifact bucket could not be resolved."
+
+                        exit 1
+
+                    fi
+
+                    export PLATFORM_ARTIFACT_BUCKET="${ARTIFACT_BUCKET}"
+
+                    export PLATFORM_CONTRACT_KEY="platform-contract/${PLATFORM_ENV}/service-contract.json"
+
+                    echo "Platform environment : ${PLATFORM_ENV}"
+                    echo "Artifact bucket      : ${PLATFORM_ARTIFACT_BUCKET}"
+                    echo "Contract key         : ${PLATFORM_CONTRACT_KEY}"
+
+                    ./platform-ci/bin/platform publish-contract
+
+                    echo ""
+                    echo "Platform contract published successfully."
+                '''
+            }
+        }
+
 
         stage('Build Docker Image') {
 
@@ -299,17 +294,20 @@ pipeline {
                         sh '''
                             set -euo pipefail
 
-                            echo "Docker build would run here."
+                            echo "Building Docker image..."
 
                             docker build \
                                 -t "${JOB_NAME}:${BUILD_NUMBER}" \
                                 .
+
+                            echo "Docker image built successfully."
                         '''
                     }
                 }
             }
         }
     }
+
 
     post {
 
@@ -324,6 +322,11 @@ pipeline {
         }
 
         always {
+
+            sh '''
+                rm -rf platform-environment-gitops
+                rm -f .platform_artifact_bucket
+            '''
 
             cleanWs()
         }
