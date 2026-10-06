@@ -7,7 +7,7 @@ pipeline {
         string(
             name: 'SERVICE_DIR',
             defaultValue: 'services/auth-service',
-            description: 'Service directory used for runtime validation and Docker build'
+            description: 'Service directory used for platform validation'
         )
 
         string(
@@ -42,6 +42,7 @@ pipeline {
                 checkout scm
 
                 script {
+
                     def gitCommit = sh(
                         script: 'git rev-parse HEAD',
                         returnStdout: true
@@ -82,18 +83,51 @@ pipeline {
                         """,
                         returnStdout: true
                     ).trim()
+
+                    echo "Detected service runtime: ${env.SERVICE_RUNTIME}"
                 }
             }
         }
 
+
         stage('Platform Contract Validation') {
+
             steps {
+
                 script {
+
                     if (env.SERVICE_RUNTIME == 'nodejs') {
 
                         docker.image('node:22-alpine').inside {
+
                             sh '''
                                 set -eu
+
+                                echo "======================================="
+                                echo "NODE.JS PLATFORM CONTRACT VALIDATION"
+                                echo "======================================="
+
+                                echo ""
+                                echo "Installing platform tooling..."
+
+                                apk add --no-cache \
+                                    bash \
+                                    curl
+
+                                YQ_VERSION="v4.48.1"
+
+                                curl -fsSL \
+                                    "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+                                    -o /usr/local/bin/yq
+
+                                chmod +x /usr/local/bin/yq
+
+                                echo ""
+                                echo "Platform tooling:"
+                                yq --version
+
+                                echo ""
+                                echo "Running platform runtime contract..."
 
                                 chmod +x platform-ci/bin/platform
                                 chmod +x platform-ci/lib/*.sh
@@ -107,8 +141,33 @@ pipeline {
                     } else if (env.SERVICE_RUNTIME == 'spring-boot') {
 
                         docker.image('maven:3.9-eclipse-temurin-21').inside("--entrypoint=''") {
+
                             sh '''
                                 set -eu
+
+                                echo "======================================="
+                                echo "SPRING BOOT PLATFORM CONTRACT VALIDATION"
+                                echo "======================================="
+
+                                echo ""
+                                echo "Installing platform tooling..."
+
+                                YQ_VERSION="v4.48.1"
+
+                                curl -fsSL \
+                                    "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
+                                    -o /tmp/yq
+
+                                chmod +x /tmp/yq
+
+                                export PATH="/tmp:${PATH}"
+
+                                echo ""
+                                echo "Platform tooling:"
+                                yq --version
+
+                                echo ""
+                                echo "Running platform runtime contract..."
 
                                 chmod +x platform-ci/bin/platform
                                 chmod +x platform-ci/lib/*.sh
@@ -120,7 +179,11 @@ pipeline {
                         }
 
                     } else {
-                        error("Unsupported runtime: ${env.SERVICE_RUNTIME}")
+
+                        error(
+                            "Unsupported runtime: " +
+                            "${env.SERVICE_RUNTIME}"
+                        )
                     }
                 }
             }
@@ -135,6 +198,10 @@ pipeline {
 
                     sh '''
                         set -euo pipefail
+
+                        echo "======================================="
+                        echo "RESOLVING PLATFORM ENVIRONMENT"
+                        echo "======================================="
 
                         rm -rf platform-environment-gitops
 
@@ -190,6 +257,10 @@ pipeline {
                 sh '''
                     set -euo pipefail
 
+                    echo "======================================="
+                    echo "GENERATING PLATFORM CONTRACT"
+                    echo "======================================="
+
                     chmod +x platform-ci/bin/platform
                     chmod +x platform-ci/lib/*.sh
 
@@ -210,6 +281,10 @@ pipeline {
 
                 sh '''
                     set -euo pipefail
+
+                    echo "======================================="
+                    echo "PUBLISHING PLATFORM CONTRACT"
+                    echo "======================================="
 
                     ARTIFACT_BUCKET=$(
                         cat "${WORKSPACE}/.platform_artifact_bucket"
@@ -240,32 +315,14 @@ pipeline {
 
             steps {
 
-                script {
+                echo "Application image build is intentionally deferred."
 
-                    echo "Docker image build will use the service runtime contract."
-
-                    echo "Service directory:"
-                    echo "${params.SERVICE_DIR}"
-
-                    echo "Runtime:"
-                    echo "${env.SERVICE_RUNTIME}"
-
-                    /*
-                     * Application image build intentionally remains
-                     * separate from platform contract generation.
-                     *
-                     * The platform CI pipeline currently proves:
-                     *
-                     * 1. Service contract
-                     * 2. Runtime contract
-                     * 3. Platform environment resolution
-                     * 4. Platform contract generation
-                     * 5. Platform contract publication
-                     *
-                     * Application image publishing can be connected
-                     * here after the platform handoff is validated.
-                     */
-                }
+                echo "Platform handoff has been validated through:"
+                echo "1. Service contract validation"
+                echo "2. Runtime contract validation"
+                echo "3. Platform environment resolution"
+                echo "4. Platform contract generation"
+                echo "5. Platform contract publication"
             }
         }
     }
