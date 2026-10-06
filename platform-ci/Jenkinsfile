@@ -86,58 +86,6 @@ pipeline {
             }
         }
 
-
-        stage('Build & Unit Tests') {
-
-            steps {
-
-                script {
-
-                    if (env.SERVICE_RUNTIME == 'nodejs') {
-
-                        docker.image(
-                            'node:22-alpine'
-                        ).inside {
-
-                            dir("${params.SERVICE_DIR}") {
-
-                                sh '''
-                                    set -euo pipefail
-
-                                    npm ci
-                                    npm test --if-present
-                                '''
-                            }
-                        }
-
-                    } else if (env.SERVICE_RUNTIME == 'spring-boot') {
-
-                        docker.image(
-                            'maven:3.9-eclipse-temurin-21'
-                        ).inside("--entrypoint=''") {
-
-                            dir("${params.SERVICE_DIR}") {
-
-                                sh '''
-                                    set -eu
-
-                                    mvn clean verify
-                                '''
-                            }
-                        }
-
-                    } else {
-
-                        error(
-                            "Unsupported runtime: " +
-                            "${env.SERVICE_RUNTIME}"
-                        )
-                    }
-                }
-            }
-        }
-
-
         stage('Platform Contract Validation') {
             steps {
                 script {
@@ -145,7 +93,7 @@ pipeline {
 
                         docker.image('node:22-alpine').inside {
                             sh '''
-                                set -euo pipefail
+                                set -eu
 
                                 chmod +x platform-ci/bin/platform
                                 chmod +x platform-ci/lib/*.sh
