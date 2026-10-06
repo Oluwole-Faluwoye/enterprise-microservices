@@ -21,28 +21,14 @@ pipeline {
 
         AWS_REGION = "us-east-1"
 
-        GITOPS_REPO = "git@github.com:Oluwole-Faluwoye/enterprise-platform-gitops.git"
+        GITOPS_REPO =
+            "git@github.com:Oluwole-Faluwoye/enterprise-platform-gitops.git"
 
         PLATFORM_ENV = "${params.PLATFORM_ENVIRONMENT}"
 
         SONARQUBE_ENV = "sonarqube"
 
         SERVICE_DIR = "${params.SERVICE_DIR}"
-    }
-
-    options {
-
-        timestamps()
-
-        disableConcurrentBuilds()
-
-        buildDiscarder(
-            logRotator(
-                numToKeepStr: '20'
-            )
-        )
-
-        ansiColor('xterm')
     }
 
     stages {
@@ -55,7 +41,10 @@ pipeline {
 
                 checkout scm
 
-                echo "Git commit: ${GIT_COMMIT}"
+                echo "Git commit: ${sh(
+                    script: 'git rev-parse HEAD',
+                    returnStdout: true
+                ).trim()}"
             }
         }
 
@@ -66,20 +55,27 @@ pipeline {
 
                 script {
 
-                    def manifest = "${params.SERVICE_DIR}/platform.yaml"
+                    if (!fileExists("${params.SERVICE_DIR}/platform.yaml")) {
 
-                    if (!fileExists(manifest)) {
-                        error("Missing platform.yaml: ${manifest}")
+                        error(
+                            "Missing service contract: " +
+                            "${params.SERVICE_DIR}/platform.yaml"
+                        )
                     }
 
                     sh """
                         set -euo pipefail
 
-                        ./platform-ci/bin/platform validate '${params.SERVICE_DIR}'
+                        ./platform-ci/bin/platform \
+                            validate ${params.SERVICE_DIR}
                     """
 
                     env.SERVICE_RUNTIME = sh(
-                        script: "yq e -r '.runtime.type' '${manifest}'",
+                        script: """
+                            yq e -r \
+                            '.runtime.type' \
+                            '${params.SERVICE_DIR}/platform.yaml'
+                        """,
                         returnStdout: true
                     ).trim()
                 }
@@ -95,7 +91,9 @@ pipeline {
 
                     if (env.SERVICE_RUNTIME == 'nodejs') {
 
-                        docker.image('node:22-alpine').inside {
+                        docker.image(
+                            'node:22-alpine'
+                        ).inside {
 
                             dir("${params.SERVICE_DIR}") {
 
@@ -112,7 +110,7 @@ pipeline {
 
                         docker.image(
                             'maven:3.9-eclipse-temurin-21'
-                        ).inside {
+                        ).inside("--entrypoint=''") {
 
                             dir("${params.SERVICE_DIR}") {
 
@@ -127,7 +125,8 @@ pipeline {
                     } else {
 
                         error(
-                            "Unsupported runtime: ${env.SERVICE_RUNTIME}"
+                            "Unsupported runtime: " +
+                            "${env.SERVICE_RUNTIME}"
                         )
                     }
                 }
@@ -145,7 +144,9 @@ pipeline {
                     chmod +x platform-ci/bin/platform
                     chmod +x platform-ci/lib/*.sh
 
-                    ./platform-ci/bin/platform test-runtime "${SERVICE_DIR}"
+                    ./platform-ci/bin/platform \
+                        test-runtime \
+                        "${SERVICE_DIR}"
                 '''
             }
         }
@@ -160,10 +161,6 @@ pipeline {
                     sh '''
                         set -euo pipefail
 
-                        echo "======================================="
-                        echo "RESOLVE PLATFORM ENVIRONMENT"
-                        echo "======================================="
-
                         rm -rf platform-environment-gitops
 
                         git clone \
@@ -175,21 +172,16 @@ pipeline {
 
                         if [ ! -f "${PLATFORM_ENV_FILE}" ]; then
 
-                            echo "ERROR: Platform environment configuration not found:"
+                            echo "ERROR: Platform environment file not found:"
                             echo "${PLATFORM_ENV_FILE}"
 
                             exit 1
-
                         fi
-
-                        echo ""
-                        echo "Platform environment configuration:"
-                        cat "${PLATFORM_ENV_FILE}"
 
                         ARTIFACT_BUCKET=$(
                             yq e -r \
-                                '.artifactStore.bucket // ""' \
-                                "${PLATFORM_ENV_FILE}"
+                            '.artifactStore.bucket // ""' \
+                            "${PLATFORM_ENV_FILE}"
                         )
 
                         if [ -z "${ARTIFACT_BUCKET}" ] ||
@@ -198,18 +190,18 @@ pipeline {
                             echo "ERROR: artifactStore.bucket is missing."
 
                             exit 1
-
                         fi
-
-                        echo ""
-                        echo "Platform environment : ${PLATFORM_ENV}"
-                        echo "Artifact bucket      : ${ARTIFACT_BUCKET}"
 
                         echo "${ARTIFACT_BUCKET}" \
                             > "${WORKSPACE}/.platform_artifact_bucket"
 
                         echo ""
-                        echo "Platform environment resolved successfully."
+                        echo "Platform environment:"
+                        echo "${PLATFORM_ENV}"
+
+                        echo ""
+                        echo "Platform artifact bucket:"
+                        echo "${ARTIFACT_BUCKET}"
                     '''
                 }
             }
@@ -223,21 +215,15 @@ pipeline {
                 sh '''
                     set -euo pipefail
 
-                    echo "======================================="
-                    echo "GENERATE PLATFORM CONTRACT"
-                    echo "======================================="
-
                     chmod +x platform-ci/bin/platform
                     chmod +x platform-ci/lib/*.sh
 
-                    ./platform-ci/bin/platform generate-contract
+                    ./platform-ci/bin/platform \
+                        generate-contract
 
                     echo ""
                     echo "Generated platform contract:"
                     cat platform-contract.json
-
-                    echo ""
-                    echo "Platform contract generated successfully."
                 '''
             }
         }
@@ -250,34 +236,26 @@ pipeline {
                 sh '''
                     set -euo pipefail
 
-                    echo "======================================="
-                    echo "PUBLISH PLATFORM CONTRACT"
-                    echo "======================================="
-
                     ARTIFACT_BUCKET=$(
                         cat "${WORKSPACE}/.platform_artifact_bucket"
                     )
 
                     if [ -z "${ARTIFACT_BUCKET}" ]; then
 
-                        echo "ERROR: Artifact bucket could not be resolved."
+                        echo "ERROR: Platform artifact bucket is empty."
 
                         exit 1
-
                     fi
 
                     export PLATFORM_ARTIFACT_BUCKET="${ARTIFACT_BUCKET}"
 
                     export PLATFORM_CONTRACT_KEY="platform-contract/${PLATFORM_ENV}/service-contract.json"
 
-                    echo "Platform environment : ${PLATFORM_ENV}"
-                    echo "Artifact bucket      : ${PLATFORM_ARTIFACT_BUCKET}"
-                    echo "Contract key         : ${PLATFORM_CONTRACT_KEY}"
+                    chmod +x platform-ci/bin/platform
+                    chmod +x platform-ci/lib/*.sh
 
-                    ./platform-ci/bin/platform publish-contract
-
-                    echo ""
-                    echo "Platform contract published successfully."
+                    ./platform-ci/bin/platform \
+                        publish-contract
                 '''
             }
         }
@@ -289,20 +267,29 @@ pipeline {
 
                 script {
 
-                    dir("${params.SERVICE_DIR}") {
+                    echo "Docker image build will use the service runtime contract."
 
-                        sh '''
-                            set -euo pipefail
+                    echo "Service directory:"
+                    echo "${params.SERVICE_DIR}"
 
-                            echo "Building Docker image..."
+                    echo "Runtime:"
+                    echo "${env.SERVICE_RUNTIME}"
 
-                            docker build \
-                                -t "${JOB_NAME}:${BUILD_NUMBER}" \
-                                .
-
-                            echo "Docker image built successfully."
-                        '''
-                    }
+                    /*
+                     * Application image build intentionally remains
+                     * separate from platform contract generation.
+                     *
+                     * The platform CI pipeline currently proves:
+                     *
+                     * 1. Service contract
+                     * 2. Runtime contract
+                     * 3. Platform environment resolution
+                     * 4. Platform contract generation
+                     * 5. Platform contract publication
+                     *
+                     * Application image publishing can be connected
+                     * here after the platform handoff is validated.
+                     */
                 }
             }
         }
@@ -310,16 +297,6 @@ pipeline {
 
 
     post {
-
-        success {
-
-            echo "Platform CI pipeline completed successfully."
-        }
-
-        failure {
-
-            echo "Platform CI pipeline failed."
-        }
 
         always {
 
@@ -329,6 +306,16 @@ pipeline {
             '''
 
             cleanWs()
+        }
+
+        success {
+
+            echo "Platform CI pipeline completed successfully."
+        }
+
+        failure {
+
+            echo "Platform CI pipeline failed."
         }
     }
 }
