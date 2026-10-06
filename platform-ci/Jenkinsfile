@@ -145,7 +145,7 @@ pipeline {
 
                         docker.image('node:22-alpine').inside {
                             sh '''
-                                set -eu
+                                set -euo pipefail
 
                                 chmod +x platform-ci/bin/platform
                                 chmod +x platform-ci/lib/*.sh
@@ -160,7 +160,7 @@ pipeline {
 
                         docker.image('maven:3.9-eclipse-temurin-21').inside("--entrypoint=''") {
                             sh '''
-                                set -euo pipefail
+                                set -eu
 
                                 chmod +x platform-ci/bin/platform
                                 chmod +x platform-ci/lib/*.sh
