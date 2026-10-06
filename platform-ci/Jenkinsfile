@@ -145,7 +145,7 @@ pipeline {
 
                         docker.image('node:22-alpine').inside {
                             sh '''
-                                set -euo pipefail
+                                set -eu
 
                                 chmod +x platform-ci/bin/platform
                                 chmod +x platform-ci/lib/*.sh
