@@ -31,22 +31,24 @@ pipeline {
         SERVICE_DIR = "${params.SERVICE_DIR}"
     }
 
-    stages {
+    stage('Checkout') {
 
-        stage('Checkout') {
+        steps {
 
-            steps {
+            echo "Checking out source code..."
 
-                echo "Checking out source code..."
+            checkout scm
 
-                checkout scm
-
-                echo "Git commit: ${sh(
+            script {
+                def gitCommit = sh(
                     script: 'git rev-parse HEAD',
                     returnStdout: true
-                ).trim()}"
+                ).trim()
+
+                echo "Git commit: ${gitCommit}"
             }
         }
+    }
 
 
         stage('Validate Service Contract') {
