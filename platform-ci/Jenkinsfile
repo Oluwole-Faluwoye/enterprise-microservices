@@ -119,7 +119,7 @@ pipeline {
                             dir("${params.SERVICE_DIR}") {
 
                                 sh '''
-                                    set -euo pipefail
+                                    set -eu
 
                                     mvn clean verify
                                 '''
