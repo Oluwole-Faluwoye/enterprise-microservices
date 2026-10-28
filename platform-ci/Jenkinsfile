@@ -305,7 +305,7 @@ pipeline {
                     chmod +x platform-ci/lib/*.sh
 
                     ./platform-ci/bin/platform \
-                        publish-contract
+                        publish-contract platform-contract.json
                 '''
             }
         }

@@ -1,0 +1,16 @@
+platform:
+  lifecycle: active
+
+service:
+  name: catalog-node
+  team: catalog
+
+runtime:
+  type: nodejs
+  version: "22"
+
+persistence:
+  enabled: false
+
+migration:
+  enabled: false

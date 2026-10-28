@@ -1,0 +1,16 @@
+platform:
+  lifecycle: active
+
+service:
+  name: catalog-spring
+  team: catalog
+
+runtime:
+  type: spring-boot
+  version: "17"
+
+persistence:
+  enabled: false
+
+migration:
+  enabled: false

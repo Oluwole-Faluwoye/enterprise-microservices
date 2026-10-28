@@ -1,0 +1,3 @@
+-- EXAMPLE ONLY: this file is not executed by Flyway.
+-- Rename it to V1__create_initial_schema.sql and replace this content
+-- with the actual schema required by your service before enabling migrations.

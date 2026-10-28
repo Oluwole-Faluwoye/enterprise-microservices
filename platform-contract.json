@@ -1,0 +1,45 @@
+{
+  "contract_version": "1",
+  "source": "enterprise-microservices",
+  "generated_at": "2026-10-28T05:32:41Z",
+  "services": {
+    "catalog-node": {
+      "runtime": {
+        "type": "nodejs",
+        "version": "22"
+      },
+      "team": "catalog",
+      "persistence": {
+        "enabled": false,
+        "mode": "none",
+        "engine": null,
+        "size": null,
+        "database_name": null,
+        "access": null
+      },
+      "migration": {
+        "enabled": false,
+        "engine": null
+      }
+    },
+    "catalog-spring": {
+      "runtime": {
+        "type": "spring-boot",
+        "version": "17"
+      },
+      "team": "catalog",
+      "persistence": {
+        "enabled": false,
+        "mode": "none",
+        "engine": null,
+        "size": null,
+        "database_name": null,
+        "access": null
+      },
+      "migration": {
+        "enabled": false,
+        "engine": null
+      }
+    }
+  }
+}

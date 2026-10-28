@@ -50,6 +50,13 @@ for MANIFEST in "${SERVICES_DIR}"/*/platform.yaml; do
 
     "${PLATFORM_ROOT}/platform-ci/lib/validate-service.sh" "${SERVICE_DIR}"
 
+    SERVICE_LIFECYCLE="$(yq e -r '.platform.lifecycle // "active"' "${MANIFEST}")"
+
+    if [[ "${SERVICE_LIFECYCLE}" == "reference" ]]; then
+        echo "Skipping reference service: ${SERVICE_DIR}"
+        continue
+    fi
+
     SERVICE_NAME="$(yq e -r '.service.name // ""' "${MANIFEST}")"
 
     if [ -z "${SERVICE_NAME}" ] || [ "${SERVICE_NAME}" = "null" ]; then

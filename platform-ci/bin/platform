@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 
 set -euo pipefail
@@ -84,6 +85,108 @@ case "${COMMAND}" in
         fi
         ;;
 
+    reconcile-gitops)
+        CONTRACT_FILE="${2:-}"
+        GITOPS_REPO="${3:-}"
+
+        if [ -z "$CONTRACT_FILE" ] || [ -z "$GITOPS_REPO" ]; then
+            echo "Usage: platform reconcile-gitops <resolved-contract.json> <gitops-repo> [--dry-run|--write] [--service NAME] [--image-tag TAG] [--image-repository REPOSITORY] [--migration-artifact-key KEY] [--environment dev|staging|prod]"
+            exit 2
+        fi
+
+        shift 3
+
+        MODE="--dry-run"
+        IMAGE_TAG_OVERRIDE=""
+        IMAGE_REPOSITORY_OVERRIDE=""
+        MIGRATION_ARTIFACT_KEY_OVERRIDE=""
+        SERVICE_FILTER=""
+        ENVIRONMENT_OVERRIDE=""
+
+        while [ "$#" -gt 0 ]; do
+            case "$1" in
+                --environment)
+                    if [ "$#" -lt 2 ]; then
+                        echo "ERROR: --environment requires dev, staging, or prod." >&2
+                        exit 2
+                    fi
+                    ENVIRONMENT_OVERRIDE="$2"
+                    shift 2
+                    ;;
+
+                --service)
+                    if [ "$#" -lt 2 ]; then
+                        echo "ERROR: --service requires a value." >&2
+                        exit 2
+                    fi
+                    SERVICE_FILTER="$2"
+                    shift 2
+                    ;;
+
+                --dry-run|--write)
+                    MODE="$1"
+                    shift
+                    ;;
+
+                --image-tag)
+                    if [ "$#" -lt 2 ]; then
+                        echo "ERROR: --image-tag requires a value." >&2
+                        exit 2
+                    fi
+                    IMAGE_TAG_OVERRIDE="$2"
+                    shift 2
+                    ;;
+
+                --image-repository)
+                    if [ "$#" -lt 2 ]; then
+                        echo "ERROR: --image-repository requires a value." >&2
+                        exit 2
+                    fi
+                    IMAGE_REPOSITORY_OVERRIDE="$2"
+                    shift 2
+                    ;;
+
+                --migration-artifact-key)
+                    if [ "$#" -lt 2 ]; then
+                        echo "ERROR: --migration-artifact-key requires a value." >&2
+                        exit 2
+                    fi
+                    MIGRATION_ARTIFACT_KEY_OVERRIDE="$2"
+                    shift 2
+                    ;;
+
+                *)
+                    echo "ERROR: Unknown reconcile-gitops option: $1" >&2
+                    exit 2
+                    ;;
+            esac
+        done
+
+        if [ -n "$ENVIRONMENT_OVERRIDE" ] &&
+           [[ ! "$ENVIRONMENT_OVERRIDE" =~ ^(dev|staging|prod)$ ]]; then
+            echo "ERROR: --environment must be dev, staging, or prod." >&2
+            exit 2
+        fi
+
+        if { [ -n "$IMAGE_TAG_OVERRIDE" ] ||
+             [ -n "$IMAGE_REPOSITORY_OVERRIDE" ] ||
+             [ -n "$MIGRATION_ARTIFACT_KEY_OVERRIDE" ]; } \
+           && [ -z "$SERVICE_FILTER" ]; then
+            echo "ERROR: --service is required with image or migration overrides." >&2
+            exit 2
+        fi
+
+        "${PLATFORM_ROOT}/lib/reconcile-gitops.sh" \
+            "$CONTRACT_FILE" \
+            "$GITOPS_REPO" \
+            "$MODE" \
+            "$IMAGE_TAG_OVERRIDE" \
+            "$MIGRATION_ARTIFACT_KEY_OVERRIDE" \
+            "$SERVICE_FILTER" \
+            "$IMAGE_REPOSITORY_OVERRIDE" \
+            "$ENVIRONMENT_OVERRIDE"
+        ;;
+
     *)
         echo "Enterprise Platform CLI"
         echo ""
@@ -94,6 +197,7 @@ case "${COMMAND}" in
         echo "  platform generate-contract [output-file]"
         echo "  platform generate-terraform-input [input-file] [output-file]"
         echo "  platform publish-contract [contract-file]"
+        echo "  platform reconcile-gitops <resolved-contract.json> <gitops-repo> [--dry-run|--write] [--service NAME] [--image-tag TAG] [--image-repository REPOSITORY] [--migration-artifact-key KEY] [--environment dev|staging|prod]"
         exit 1
         ;;
 

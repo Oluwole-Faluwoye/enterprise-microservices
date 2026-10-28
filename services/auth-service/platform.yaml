@@ -1,3 +1,6 @@
+platform:
+  lifecycle: reference
+
 service:
   name: auth-service
   team: identity

@@ -4,7 +4,7 @@ set -euo pipefail
 
 PLATFORM_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-INPUT_FILE="${1:-${PLATFORM_ROOT}/platform-contract.json}"
+INPUT_FILE="${1:?Usage: generate-terraform-input.sh <contract.json> [output.json]}"
 OUTPUT_FILE="${2:-${PLATFORM_ROOT}/terraform-services.auto.tfvars.json}"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -12,7 +12,7 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ ! -f "${INPUT_FILE}" ]; then
+if [[ ! -f "${INPUT_FILE}" ]]; then
     echo "ERROR: Platform contract not found: ${INPUT_FILE}"
     exit 1
 fi
@@ -22,13 +22,13 @@ echo "ENTERPRISE PLATFORM"
 echo "TERRAFORM INPUT GENERATION"
 echo "======================================="
 
-echo ""
+echo
 echo "Input  : ${INPUT_FILE}"
 echo "Output : ${OUTPUT_FILE}"
 
-jq empty "${INPUT_FILE}"
+"${PLATFORM_ROOT}/platform-ci/lib/validate-contract.sh" "${INPUT_FILE}"
 
-echo ""
+echo
 echo "Generating Terraform service input..."
 
 jq '
@@ -60,19 +60,18 @@ jq '
 }
 ' "${INPUT_FILE}" > "${OUTPUT_FILE}"
 
-echo ""
-echo "Generated Terraform input:"
+echo
+echo "Validating generated Terraform input..."
+jq -e '
+    type == "object"
+    and (.services | type == "object" and length > 0)
+' "${OUTPUT_FILE}" >/dev/null
 
+echo "Generated Terraform input:"
 cat "${OUTPUT_FILE}"
 
-echo ""
-echo "======================================="
-echo "TERRAFORM INPUT GENERATED"
-echo "======================================="
-
-echo ""
+echo
 echo "Services:"
 jq -r '.services | keys[]' "${OUTPUT_FILE}"
 
-echo ""
 echo "Terraform input generated successfully."

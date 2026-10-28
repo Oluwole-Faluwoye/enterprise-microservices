@@ -9,11 +9,25 @@ if [ -z "${SERVICE_DIR}" ]; then
     exit 1
 fi
 
+
 MANIFEST="${SERVICE_DIR}/platform.yaml"
 
 if [ ! -f "${MANIFEST}" ]; then
     echo "ERROR: Missing platform.yaml: ${MANIFEST}"
     exit 1
+fi
+
+SERVICE_LIFECYCLE=$(yq e -r '.platform.lifecycle // ""' "${MANIFEST}")
+
+if [[ -n "${SERVICE_LIFECYCLE}" ]]; then
+    case "${SERVICE_LIFECYCLE}" in
+        active|reference)
+            ;;
+        *)
+            echo "ERROR: Invalid platform.lifecycle: ${SERVICE_LIFECYCLE}. Expected active or reference."
+            exit 1
+            ;;
+    esac
 fi
 
 echo "======================================="

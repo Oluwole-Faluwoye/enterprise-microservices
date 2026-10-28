@@ -1,3 +1,6 @@
+platform:
+  lifecycle: reference
+
 service:
   name: payments-service
   team: payments
@@ -7,7 +10,12 @@ runtime:
   version: "22"
 
 persistence:
-  enabled: false
+  enabled: true
+  mode: new
+  engine: postgres
+  size: small
+  database_name: paymentsdb
 
 migration:
-  enabled: false
+  enabled: true
+  engine: flyway
