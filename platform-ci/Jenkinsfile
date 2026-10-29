@@ -6,7 +6,7 @@ pipeline {
 
         string(
             name: 'SERVICE_DIR',
-            defaultValue: 'services/auth-service',
+            defaultValue: 'services/catalog-node',
             description: 'Service directory used for platform validation'
         )
 
@@ -98,7 +98,7 @@ pipeline {
 
                     if (env.SERVICE_RUNTIME == 'nodejs') {
 
-                        docker.image('node:22-alpine').inside {
+                        docker.image('node:22-bookworm').inside {
 
                             sh '''
                                 set -eu
@@ -107,30 +107,24 @@ pipeline {
                                 echo "NODE.JS PLATFORM CONTRACT VALIDATION"
                                 echo "======================================="
 
-                                echo ""
-                                echo "Installing platform tooling..."
-
-                                apk add --no-cache \
-                                    bash \
-                                    curl
+                                echo "Installing platform tooling in writable directory..."
 
                                 YQ_VERSION="v4.48.1"
 
                                 curl -fsSL \
                                     "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
-                                    -o /usr/local/bin/yq
+                                    -o /tmp/yq
 
-                                chmod +x /usr/local/bin/yq
+                                chmod +x /tmp/yq
+                                export PATH="/tmp:${PATH}"
 
-                                echo ""
                                 echo "Platform tooling:"
+                                bash --version | head -n 1
+                                node --version
+                                npm --version
                                 yq --version
 
-                                echo ""
                                 echo "Running platform runtime contract..."
-
-                                chmod +x platform-ci/bin/platform
-                                chmod +x platform-ci/lib/*.sh
 
                                 bash ./platform-ci/bin/platform \
                                     test-runtime \
