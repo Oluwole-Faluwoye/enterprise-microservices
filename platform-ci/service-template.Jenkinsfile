@@ -426,11 +426,13 @@ pipeline {
             }
         }
 
-        stage('GitOps Reconciliation (Dry Run)') {
+
+        stage('GitOps Reconciliation and Publish') {
             steps {
                 sshagent(['github-ssh']) {
                     sh '''
                         set -euo pipefail
+
                         PLATFORM_CLI="$WORKSPACE/platform-ci/bin/platform"
                         ARTIFACT_BUCKET="$(cat "$WORKSPACE/.artifact_bucket")"
                         TMP_ROOT="$(mktemp -d)"
@@ -442,43 +444,113 @@ pipeline {
                         aws s3 cp \
                           "s3://$ARTIFACT_BUCKET/platform-contract/$PLATFORM_ENVIRONMENT/gitops-service-contract.json" \
                           "$CONTRACT_FILE"
+
                         jq empty "$CONTRACT_FILE"
 
                         jq -e --arg service "$SERVICE_NAME" '
-                          (if has("services") then .services else . end) | has($service)
+                          (if has("services") then .services else . end)
+                          | has($service)
                         ' "$CONTRACT_FILE" >/dev/null || {
-                          echo "ERROR: $SERVICE_NAME is missing from the resolved $PLATFORM_ENVIRONMENT contract." >&2
+                          echo "ERROR: $SERVICE_NAME is missing from the resolved contract." >&2
                           exit 1
                         }
 
                         CONTRACT_MIGRATION_ENABLED="$(jq -r --arg service "$SERVICE_NAME" '
-                          (if has("services") then .services else . end) | .[$service].migration.enabled // false
+                          (if has("services") then .services else . end)
+                          | .[$service].migration.enabled // false
                         ' "$CONTRACT_FILE")"
 
                         git clone "$GITOPS_REPO" "$GITOPS_WORKTREE"
 
-                        set -- "$PLATFORM_CLI" reconcile-gitops \
-                          "$CONTRACT_FILE" "$GITOPS_WORKTREE" \
-                          --dry-run \
-                          --service "$SERVICE_NAME" \
-                          --image-tag "$IMAGE_TAG" \
-                          --image-repository "$ECR_REPO" \
-                          --environment "$PLATFORM_ENVIRONMENT"
+                        test "$(git -C "$GITOPS_WORKTREE" branch --show-current)" = "main" || {
+                          echo "ERROR: GitOps checkout is not on main." >&2
+                          exit 1
+                        }
 
-                        if [ "$CONTRACT_MIGRATION_ENABLED" = "true" ]; then
-                          MIGRATION_KEY="$SERVICE_NAME/migrations/$GIT_COMMIT/db/migration"
-                          set -- "$@" --migration-artifact-key "$MIGRATION_KEY"
-                        fi
+                        run_reconciliation() {
+                          MODE="$1"
 
-                        "$@"
+                          set -- "$PLATFORM_CLI" reconcile-gitops \
+                            "$CONTRACT_FILE" "$GITOPS_WORKTREE" \
+                            "$MODE" \
+                            --service "$SERVICE_NAME" \
+                            --image-tag "$IMAGE_TAG" \
+                            --image-repository "$ECR_REPO" \
+                            --environment "$PLATFORM_ENVIRONMENT"
+
+                          if [ "$CONTRACT_MIGRATION_ENABLED" = "true" ]; then
+                            MIGRATION_KEY="$SERVICE_NAME/migrations/$GIT_COMMIT/db/migration"
+                            set -- "$@" --migration-artifact-key "$MIGRATION_KEY"
+                          fi
+
+                          "$@"
+                        }
+
+                        echo "=== Step 1: Validate with dry run ==="
+                        run_reconciliation --dry-run
 
                         if [ -n "$(git -C "$GITOPS_WORKTREE" status --porcelain)" ]; then
-                          echo "ERROR: Dry-run unexpectedly changed GitOps files." >&2
+                          echo "ERROR: Dry run unexpectedly changed GitOps files." >&2
                           git -C "$GITOPS_WORKTREE" status --short
                           exit 1
                         fi
 
-                        echo "Dry-run complete. No GitOps files were written, committed, or pushed."
+                        echo "=== Step 2: Generate GitOps files ==="
+                        run_reconciliation --write
+
+
+                        echo "=== Step 3: Verify the generated changes ==="
+
+                        git -C "$GITOPS_WORKTREE" status --short
+                        git -C "$GITOPS_WORKTREE" diff --check
+
+                        # Stage only the selected service's GitOps files.
+                        git -C "$GITOPS_WORKTREE" add -- \
+                          "applications/$SERVICE_NAME.yaml" \
+                          "charts/$SERVICE_NAME"
+
+                        # Verify the staged changes are restricted to this service.
+                        STAGED_FILES="$(git -C "$GITOPS_WORKTREE" diff --cached --name-only)"
+
+                        if [ -z "$STAGED_FILES" ]; then
+                          echo "No GitOps changes needed; nothing to commit."
+                          exit 0
+                        fi
+
+                        while IFS= read -r path; do
+                          case "$path" in
+                            "applications/$SERVICE_NAME.yaml" | \
+                            "charts/$SERVICE_NAME/"* )
+                              ;;
+                            * )
+                              echo "ERROR: Unexpected staged GitOps change: $path" >&2
+                              exit 1
+                              ;;
+                          esac
+                        done <<EOF
+$STAGED_FILES
+EOF
+
+                        echo "Staged GitOps changes:"
+                        printf '%s\n' "$STAGED_FILES"
+
+                        git -C "$GITOPS_WORKTREE" diff --cached --check
+                        git -C "$GITOPS_WORKTREE" diff --cached -- \
+                          "applications/$SERVICE_NAME.yaml" \
+                          "charts/$SERVICE_NAME"
+
+                        echo "=== Step 4: Commit and push ==="
+
+                        git -C "$GITOPS_WORKTREE" config user.name "Enterprise Platform CI"
+                        git -C "$GITOPS_WORKTREE" config user.email "enterprise-platform-ci@users.noreply.github.com"
+
+                        git -C "$GITOPS_WORKTREE" commit \
+                          -m "Reconcile $SERVICE_NAME for $PLATFORM_ENVIRONMENT"
+
+                        git -C "$GITOPS_WORKTREE" push origin HEAD:main
+
+                        echo "GitOps reconciliation and publish completed."
+
                     '''
                 }
             }
